@@ -9,6 +9,7 @@ Um núcleo comum (GPS, odômetro em km e estacas, sessões, fotos, exportação,
 | Marco Zero | Navegação e locação de obra em km e estacas |
 | SLIR | Patologias e inventário com foto legendada |
 | SH | Sinalização horizontal: pintura com um toque, KML, croqui linear e quantitativos |
+| SV | Sinalização vertical, defensas e barreiras: inventário por estado de conservação |
 
 ## Estrutura
 

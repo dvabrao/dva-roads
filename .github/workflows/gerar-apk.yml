@@ -54,4 +54,5 @@ jobs:
             - Módulo Marco Zero: navegação e locação de obra
             - Módulo SLIR: patologias e inventário com foto legendada
             - Módulo SH: sinalização horizontal com um toque, KML e croqui linear
+            - Módulo SV: placas, defensas e barreiras com estado de conservação e filtros
             - Módulos liberados por chave de ativação

@@ -1,0 +1,330 @@
+// ════════════════════════════════════════════════════════════════
+//  Módulo SV — Sinalização vertical e dispositivos de segurança
+//  Cadastro / inventário de uma rodovia (órgão ou concessionária):
+//  placas por código (MBST/CONTRAN), defensas e barreiras rígidas
+//  por trecho (início/fim), demais dispositivos pontuais.
+//  Tudo com estado de conservação, que filtra a lista, o relatório e o KML.
+// ════════════════════════════════════════════════════════════════
+(function () {
+  // ── estados de conservação ──────────────────────────────────
+  const ESTADOS = [
+    { v: 'Bom', cor: '#2E7D32' }, { v: 'Regular', cor: '#F9A825' }, { v: 'Danificada', cor: '#EF6C00' },
+    { v: 'Ausente', cor: '#C62828' }, { v: 'Desbotada / sem retrorrefletância', cor: '#8D6E63' },
+    { v: 'Torta / desalinhada', cor: '#6D4C41' }, { v: 'Encoberta (vegetação)', cor: '#558B2F' }, { v: 'Pichada / vandalizada', cor: '#7B1FA2' },
+  ];
+  const corEst = (e) => (ESTADOS.find(x => x.v === e) || { cor: '#607D8B' }).cor;
+  const problema = (e) => e && e !== 'Bom';
+
+  // ── categorias e catálogo de placas (editável) ──────────────
+  const CAT = {
+    R: { n: 'Regulamentação', ico: 'R' }, A: { n: 'Advertência', ico: 'A' }, I: { n: 'Indicação', ico: 'I' },
+    EDU: { n: 'Educativa', ico: 'EDU' }, SA: { n: 'Serviços auxiliares', ico: 'SA' }, TUR: { n: 'Atrativo turístico', ico: 'TUR' }, OBR: { n: 'Obras', ico: 'OBR' },
+  };
+  const CATALOGO_PADRAO = {
+    R: ['R-1 Parada obrigatória', 'R-2 Dê a preferência', 'R-3 Sentido proibido', 'R-4a Proibido virar à esquerda', 'R-4b Proibido virar à direita',
+      'R-5a Proibido retornar à esquerda', 'R-6a Proibido estacionar', 'R-6c Proibido parar e estacionar', 'R-7 Proibido ultrapassar',
+      'R-9 Proibido trânsito de caminhões', 'R-19 Velocidade máxima permitida', 'R-24a Sentido de circulação da via', 'R-26 Siga em frente',
+      'R-28 Duplo sentido de circulação', 'R-33 Sentido de circulação na rotatória'],
+    A: ['A-1a Curva acentuada à esquerda', 'A-1b Curva acentuada à direita', 'A-2a Curva à esquerda', 'A-2b Curva à direita',
+      'A-3a Pista sinuosa à esquerda', 'A-3b Pista sinuosa à direita', 'A-6 Cruzamento de vias', 'A-7a Via lateral à esquerda', 'A-7b Via lateral à direita',
+      'A-8 Interseção em T', 'A-9 Bifurcação em Y', 'A-12 Interseção em círculo', 'A-14 Semáforo à frente', 'A-15 Parada obrigatória à frente',
+      'A-17 Pista irregular', 'A-18 Saliência ou lombada', 'A-19 Depressão', 'A-20a Declive acentuado', 'A-20b Aclive acentuado',
+      'A-21a Estreitamento de pista ao centro', 'A-24 Obras', 'A-26a Mão dupla adiante', 'A-28 Pista escorregadia',
+      'A-32b Passagem sinalizada de pedestres', 'A-33a Área escolar', 'A-35 Animais', 'A-42a Início de pista dupla', 'A-42b Fim de pista dupla'],
+    I: ['Identificação de rodovia', 'Identificação de município / localidade', 'Distância (km a destinos)', 'Orientação de destino',
+      'Pré-sinalização', 'Marco quilométrico', 'Identificação de ponte / curso d’água'],
+    EDU: ['Educativa'], SA: ['Posto de combustível', 'Restaurante', 'Hospital / pronto-socorro', 'Polícia rodoviária', 'Área de descanso', 'Telefone de emergência'],
+    TUR: ['Atrativo turístico'], OBR: ['Obras / desvio', 'Fim de obras'],
+  };
+  const LADOS = { D: 'Direito', E: 'Esquerdo', CC: 'Canteiro central', AE: 'Aérea (pórtico)' };
+  const SUPORTES = ['Coluna simples', 'Coluna dupla', 'Semipórtico', 'Pórtico', 'Poste existente', 'Fixada em estrutura', 'Sem suporte'];
+  const PELICULAS = ['Não verificada', 'Grau técnico', 'Alta intensidade', 'Grau diamante / prismática', 'Sem película refletiva'];
+  // dispositivos de segurança por trecho e pontuais
+  const SEGS = { DEF: { n: 'Defensa metálica', tipos: ['Simples', 'Dupla', 'Semimaleável', 'Maleável'] }, BAR: { n: 'Barreira rígida', tipos: ['New Jersey', 'Perfil F', 'Vertical', 'Simples (meia barreira)'] } };
+  const DISP = ['Terminal de defensa', 'Atenuador de impacto', 'Delineador / balizador', 'Marcador de obstáculo', 'Marco quilométrico', 'Pórtico / semipórtico', 'Tela antiofuscante'];
+
+  const catalogo = () => Object.assign({}, CATALOGO_PADRAO, Store.readJSON('Config/sv_catalogo.json', {}) || {});
+  let frozen = null, editId = null, cat = 'R', lado = 'D', estado = 'Bom', fotos = [], filtroTela = '';
+
+  // ── ícones dos botões (SVG simples) ─────────────────────────
+  const ic = {
+    R: '<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="#fff" stroke="#C62828" stroke-width="5"/><text x="20" y="25" font-size="13" font-weight="800" text-anchor="middle" fill="#111" font-family="Arial">R</text></svg>',
+    A: '<svg viewBox="0 0 40 40"><rect x="8" y="8" width="24" height="24" transform="rotate(45 20 20)" fill="#F5C500" stroke="#111" stroke-width="2"/><text x="20" y="25" font-size="13" font-weight="800" text-anchor="middle" fill="#111" font-family="Arial">A</text></svg>',
+    I: '<svg viewBox="0 0 40 40"><rect x="4" y="10" width="32" height="20" rx="3" fill="#2E7D32" stroke="#fff" stroke-width="1.5"/><text x="20" y="25" font-size="12" font-weight="800" text-anchor="middle" fill="#fff" font-family="Arial">I</text></svg>',
+    EDU: '<svg viewBox="0 0 40 40"><rect x="4" y="10" width="32" height="20" rx="3" fill="#fff" stroke="#111" stroke-width="2"/><text x="20" y="24" font-size="9" font-weight="800" text-anchor="middle" fill="#111" font-family="Arial">EDU</text></svg>',
+    SA: '<svg viewBox="0 0 40 40"><rect x="7" y="6" width="26" height="28" rx="3" fill="#1565C0"/><rect x="13" y="12" width="14" height="12" fill="#fff"/><text x="20" y="22" font-size="9" font-weight="800" text-anchor="middle" fill="#1565C0" font-family="Arial">SA</text></svg>',
+    TUR: '<svg viewBox="0 0 40 40"><rect x="4" y="10" width="32" height="20" rx="3" fill="#6D4C41"/><text x="20" y="24" font-size="9" font-weight="800" text-anchor="middle" fill="#fff" font-family="Arial">TUR</text></svg>',
+    OBR: '<svg viewBox="0 0 40 40"><rect x="8" y="8" width="24" height="24" transform="rotate(45 20 20)" fill="#EF6C00" stroke="#111" stroke-width="2"/><text x="20" y="24" font-size="8" font-weight="800" text-anchor="middle" fill="#111" font-family="Arial">OBR</text></svg>',
+    DEF: '<svg viewBox="0 0 40 40"><rect x="9" y="14" width="3" height="20" fill="#555"/><rect x="28" y="14" width="3" height="20" fill="#555"/><path d="M3 15 h34 v3 l-3 2 l3 2 v3 h-34 v-3 l3 -2 l-3 -2z" fill="#90A4AE" stroke="#455A64" stroke-width="1.2"/></svg>',
+    BAR: '<svg viewBox="0 0 40 40"><path d="M14 6 h12 v8 l6 16 v4 h-24 v-4 l6 -16z" fill="#BDBDBD" stroke="#616161" stroke-width="1.5"/></svg>',
+    DISP: '<svg viewBox="0 0 40 40"><rect x="17" y="6" width="6" height="28" fill="#fff" stroke="#111" stroke-width="1.5"/><rect x="17" y="9" width="6" height="5" fill="#F5C500"/><rect x="10" y="33" width="20" height="3" fill="#555"/></svg>',
+  };
+
+  // ── trechos (defensa/barreira): pares início → fim ──────────
+  function trechos(s) {
+    const out = []; const abertos = {};
+    s.eventos.forEach(ev => {
+      if (ev.grupo !== 'seg') return; const d = ev.dados || {};
+      if (d.ini) abertos[d.sid] = { ini: ev, d };
+      else if (abertos[d.sid]) { const a = abertos[d.sid]; out.push({ ini: a.ini, fim: ev, elem: a.d.elem, tipo: a.d.tipo, lado: a.d.lado, estado: d.estado || a.d.estado, len: Math.abs(ev.d - a.ini.d), sid: d.sid }); delete abertos[d.sid]; }
+    });
+    Object.values(abertos).forEach(a => out.push({ ini: a.ini, fim: null, elem: a.d.elem, tipo: a.d.tipo, lado: a.d.lado, estado: a.d.estado, len: Math.abs(s.dist - a.ini.d), sid: a.d.sid, aberto: true }));
+    return out;
+  }
+  const abertosAgora = (s) => trechos(s).filter(t => t.aberto);
+  const estadoDe = (ev) => (ev.dados || {}).estado || '';
+  function passaFiltro(ev, f) {
+    if (!f) return true;
+    if (ev.grupo === 'seg' && !(ev.dados || {}).ini) return true;   // fim acompanha o início no relatório
+    const e = estadoDe(ev);
+    return f === '__problema' ? problema(e) : e === f;
+  }
+  const filtros = () => [{ v: '', t: 'Todos os itens' }, { v: '__problema', t: 'Só itens com problema (tudo exceto Bom)' }].concat(ESTADOS.map(e => ({ v: e.v, t: e.v })));
+
+  const M = {
+    id: 'sv', nome: 'Sinalização Vertical', sub: 'Placas, defensas e barreiras · inventário por estado', icone: '🪧', prefixo: 'V',
+    titulo: (ev) => ev.rotulo,
+    descricao: (ev) => {
+      const d = ev.dados || {};
+      if (ev.grupo === 'seg') return d.ini ? [LADOS[d.lado], d.tipo, d.estado].filter(Boolean).join(' · ') : 'Fim do trecho' + (d.estado ? ' · ' + d.estado : '');
+      return [LADOS[d.lado], d.legenda ? '“' + d.legenda + '”' : '', d.larg && d.alt ? nf(d.larg, 2) + ' × ' + nf(d.alt, 2) + ' m' : '', d.suporte, d.estado].filter(Boolean).join(' · ');
+    },
+    iconeEvento: (ev) => { const e = estadoDe(ev); return e ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${corEst(e)};margin-right:2px"></span>` : ''; },
+    filtros, passaFiltro,
+    filtroLista: (ev) => passaFiltro(ev, filtroTela),
+
+    camposAbertura(u) {
+      u = u || {};
+      const sel = (id, o, v) => `<select class="inp" id="${id}">${o.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+      return `<div class="fsec">Inventário</div>
+        <div class="field"><label>Órgão ou concessionária</label><input class="inp" id="sv-org" value="${esc(u.orgao || '')}" placeholder="ex.: DER-SP, concessionária..."></div>
+        <div class="fgrid">
+          <div class="field"><label>Tipo de levantamento</label>${sel('sv-tipo', ['Cadastro inicial', 'Inventário', 'Vistoria de conservação'], u.tipo || 'Inventário')}</div>
+          <div class="field"><label>Contrato / referência</label><input class="inp" id="sv-ref" value="${esc(u.ref || '')}"></div>
+          <div class="field"><label>Pista</label>${sel('sv-pista', ['Simples', 'Dupla'], u.pista || 'Simples')}</div>
+          <div class="field"><label>Lados levantados</label>${sel('sv-lados', ['Direito', 'Esquerdo', 'Ambos'], u.lados || 'Direito')}</div>
+        </div>
+        <p class="help">Códigos das placas conforme o Manual Brasileiro de Sinalização de Trânsito (CONTRAN). O catálogo pode ser completado no próprio app.</p>`;
+    },
+    lerAbertura() {
+      return { orgao: val('sv-org').trim(), tipo: val('sv-tipo'), ref: val('sv-ref').trim(), pista: val('sv-pista'), lados: val('sv-lados') };
+    },
+
+    painel(s) {
+      const b = (k, l, fn, sub) => `<button class="sh-btn" onclick="${fn}"><span class="sv-ico">${ic[k]}</span><span>${l}</span>${sub ? `<small>${sub}</small>` : ''}</button>`;
+      return `<div class="card">
+        <div class="sh-state" id="sv-state"></div>
+        <div id="sv-abertos"></div>
+        <div class="sh-grp"><div class="sh-grp-t">Placas</div><div class="sh-grid">
+          ${b('R', 'Regulamentação', "SV.placa('R')")}${b('A', 'Advertência', "SV.placa('A')")}${b('I', 'Indicação', "SV.placa('I')")}
+          ${b('EDU', 'Educativa', "SV.placa('EDU')")}${b('SA', 'Serviços', "SV.placa('SA')")}${b('TUR', 'Turística', "SV.placa('TUR')")}
+          ${b('OBR', 'Obras', "SV.placa('OBR')")}</div></div>
+        <div class="sh-grp"><div class="sh-grp-t">Dispositivos de segurança</div><div class="sh-grid">
+          ${b('DEF', 'Defensa', "SV.iniSeg('DEF')", 'início do trecho')}${b('BAR', 'Barreira rígida', "SV.iniSeg('BAR')", 'início do trecho')}${b('DISP', 'Outro dispositivo', 'SV.disp()', 'terminal, atenuador...')}</div></div>
+        <div class="sh-grp"><div class="sh-grp-t">Mostrar na lista</div><div class="chips" id="sv-filtro"></div></div>
+        <div style="display:flex;gap:8px;margin-top:6px"><button class="btn-sm n" style="flex:1" onclick="Export.open()">📤 Exportar</button><button class="btn-sm g" style="flex:1" onclick="SV.editarCatalogo()">✏️ Catálogo de placas</button></div>
+      </div>`;
+    },
+    montar(s) { M.atualizar(s); },
+    atualizar(s) {
+      if (!$('sv-state')) return;
+      const n = s.eventos.filter(e => e.grupo !== 'seg' || (e.dados || {}).ini);
+      const prob = n.filter(e => problema(estadoDe(e))).length;
+      $('sv-state').innerHTML = `Itens: <b>${n.length}</b> · com problema: <b style="color:${prob ? '#C62828' : 'inherit'}">${prob}</b>` + (s.params && s.params.orgao ? ' · ' + esc(s.params.orgao) : '');
+      $('sv-abertos').innerHTML = abertosAgora(s).map(t => `<button class="btn-full" style="margin-bottom:8px;background:#C62828;color:#fff" onclick="SV.fimSeg('${t.sid}')">⏹ Fim ${esc(SEGS[t.elem].n.toLowerCase())} · ${esc(LADOS[t.lado])} <small style="opacity:.8">(desde ${esc(posTxt(s, t.ini))})</small></button>`).join('');
+      $('sv-filtro').innerHTML = [{ v: '', t: 'Todos' }, { v: '__problema', t: 'Com problema' }].concat(ESTADOS.slice(1).map(e => ({ v: e.v, t: e.v.split(' ')[0] })))
+        .map(f => `<button class="chip ${filtroTela === f.v ? 'sel' : ''}" onclick="SV.filtrar('${esc(f.v)}')">${esc(f.t)}</button>`).join('');
+    },
+
+    relatorio(s, ctx) {
+      const p = s.params || {}; const f = ctx.filtro;
+      const evs = s.eventos.filter(ev => passaFiltro(ev, f));
+      const itens = evs.filter(e => e.grupo !== 'seg' || (e.dados || {}).ini);
+      // resumo: categoria × estado
+      const linhas = {}; const cols = {};
+      itens.forEach(e => {
+        const k = e.grupo === 'placa' ? 'Placa · ' + CAT[(e.dados || {}).cat].n : e.grupo === 'seg' ? SEGS[e.dados.elem].n : e.rotulo;
+        const st = estadoDe(e) || '—'; cols[st] = 1; linhas[k] = linhas[k] || {}; linhas[k][st] = (linhas[k][st] || 0) + 1;
+      });
+      const cs = ESTADOS.map(e => e.v).filter(v => cols[v]).concat(cols['—'] ? ['—'] : []);
+      const resumo = `<h2>Resumo por tipo e estado</h2><table><thead><tr><th>Item</th>${cs.map(c => `<th class="c">${esc(c.split(' ')[0])}</th>`).join('')}<th class="c">Total</th></tr></thead><tbody>
+        ${Object.keys(linhas).sort().map(k => { const r = linhas[k]; const t = Object.values(r).reduce((a, b) => a + b, 0); return `<tr><td>${esc(k)}</td>${cs.map(c => `<td class="c">${r[c] || ''}</td>`).join('')}<td class="c b">${t}</td></tr>`; }).join('') || `<tr><td colspan="${cs.length + 2}" class="c">Nenhum item${f ? ' com este filtro' : ''}.</td></tr>`}
+      </tbody></table>`;
+      const tr = trechos(s).filter(t => !f || (f === '__problema' ? problema(t.estado) : t.estado === f));
+      const tot = {}; tr.forEach(t => { const k = SEGS[t.elem].n; tot[k] = (tot[k] || 0) + t.len; });
+      const segs = `<h2>Defensas e barreiras</h2><table><thead><tr><th>Elemento</th><th>Lado</th><th>Início</th><th>Fim</th><th class="r">Extensão (m)</th><th>Estado</th></tr></thead><tbody>
+        ${tr.map(t => `<tr><td>${esc(SEGS[t.elem].n)}${t.tipo ? ' · ' + esc(t.tipo) : ''}</td><td>${esc(LADOS[t.lado] || '')}</td><td class="nw">${esc(posTxt(s, t.ini))}</td><td class="nw">${t.fim ? esc(posTxt(s, t.fim)) : 'em aberto'}</td><td class="r">${nf(t.len, 1)}</td><td><span style="color:${corEst(t.estado)};font-weight:700">${esc(t.estado || '')}</span></td></tr>`).join('') || '<tr><td colspan="6" class="c">—</td></tr>'}
+        ${Object.keys(tot).map(k => `<tr><td colspan="4" class="b">Total ${esc(k.toLowerCase())}</td><td class="r b">${nf(tot[k], 1)}</td><td></td></tr>`).join('')}
+      </tbody></table>`;
+      const cab = `<h2>Inventário</h2><table><tbody>
+        <tr><td><b>Órgão / concessionária</b></td><td>${esc(p.orgao || '—')}</td><td><b>Tipo</b></td><td>${esc(p.tipo || '—')}</td></tr>
+        <tr><td><b>Contrato / referência</b></td><td>${esc(p.ref || '—')}</td><td><b>Pista · lados</b></td><td>${esc((p.pista || '—') + ' · ' + (p.lados || '—'))}</td></tr>
+        <tr><td><b>Filtro aplicado</b></td><td colspan="3">${esc(f ? filtros().find(x => x.v === f).t : 'Todos os itens')}</td></tr></tbody></table>`;
+      return cab + resumo + segs + '<h2>Itens</h2>' + ctx.tabelaPadrao(evs);
+    },
+    kmlEstilos(s, kc) {
+      return ESTADOS.map((e, i) => `<Style id="sv-e${i}"><IconStyle><color>${kc(e.cor)}</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle><LineStyle><color>${kc(e.cor)}</color><width>7</width></LineStyle></Style>`).join('\n');
+    },
+    kmlEstiloEvento: (ev) => { const i = ESTADOS.findIndex(e => e.v === estadoDe(ev)); return i >= 0 ? 'sv-e' + i : 'pt'; },
+    kmlExtra(s, h) {
+      const tr = trechos(s).filter(t => !h.filtro || (h.filtro === '__problema' ? problema(t.estado) : t.estado === h.filtro));
+      const pm = tr.map(t => {
+        const c = h.trechoTrack(s, t.ini.d, t.fim ? t.fim.d : s.dist); if (!c) return '';
+        const i = ESTADOS.findIndex(e => e.v === t.estado);
+        return `<Placemark><name>${esc(SEGS[t.elem].n + ' · ' + (LADOS[t.lado] || '') + ' · ' + nf(t.len, 0) + ' m')}</name><description>${esc((t.tipo || '') + ' · ' + (t.estado || '') + ' · ' + posTxt(s, t.ini) + (t.fim ? ' → ' + posTxt(s, t.fim) : ''))}</description><styleUrl>#sv-e${i >= 0 ? i : 0}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${c}</coordinates></LineString></Placemark>`;
+      });
+      return pm.length ? `<Folder><name>Defensas e barreiras</name>\n${pm.join('\n')}</Folder>\n` : '';
+    },
+    editar(id) {
+      const s = Core.S(); const ev = s.eventos.find(e => e.id === id); if (!ev) return;
+      const d = ev.dados || {};
+      editId = id; frozen = ev; fotos = (ev.fotos || []).slice(); estado = d.estado || 'Bom'; lado = d.lado || 'D';
+      if (ev.grupo === 'placa') { cat = d.cat; formPlaca('✏️ Editar ' + Core.codigo(s, ev), ev); }
+      else if (ev.grupo === 'seg') formSeg(d.ini ? '✏️ Início ' + SEGS[d.elem].n.toLowerCase() : '✏️ Fim do trecho', ev, d.elem, !d.ini);
+      else formDisp('✏️ Editar ' + Core.codigo(s, ev), ev);
+    },
+  };
+
+  // ── formulários ─────────────────────────────────────────────
+  const chipsLado = () => `<div class="field"><label>Lado</label><div class="chips">${Object.keys(LADOS).map(k => `<button class="chip" id="sv-l-${k}" onclick="SV.lado('${k}')">${LADOS[k]}</button>`).join('')}</div></div>`;
+  const chipsEstado = () => `<div class="field"><label>Estado de conservação</label><div class="chips">${ESTADOS.map((e, i) => `<button class="chip" id="sv-e-${i}" onclick="SV.estado(${i})">${esc(e.v)}</button>`).join('')}</div></div>`;
+  const blocoFoto = () => `<div class="field"><button class="btn-cam" id="sv-cam" onclick="SV.foto()">📷 Tirar foto</button><div id="sv-fotos" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div>`;
+  const cabPos = (s) => `<div class="field"><label>Posição (travada no toque)</label><div class="preview-fmt">${esc(posTxt(s, frozen) + ' · ' + fmtCoord(frozen.lat, frozen.lon))}</div></div>`;
+  function marcar() {
+    Object.keys(LADOS).forEach(k => { const b = $('sv-l-' + k); if (b) b.className = 'chip' + (lado === k ? ' sel' : ''); });
+    ESTADOS.forEach((e, i) => { const b = $('sv-e-' + i); if (b) { b.className = 'chip' + (estado === e.v ? ' sel' : ''); b.style.borderColor = estado === e.v ? e.cor : ''; } });
+    const el = $('sv-fotos'); const s = Core.S();
+    if (el) { el.innerHTML = fotos.map(f => `<img class="photo-thumb" src="${Photo.src(s, f)}">`).join(''); $('sv-cam').className = 'btn-cam' + (fotos.length ? ' has' : ''); $('sv-cam').textContent = fotos.length ? '📷 Mais uma foto (' + fotos.length + ')' : '📷 Tirar foto'; }
+  }
+  function formPlaca(title, ev) {
+    const s = Core.S(); const d = (ev && ev.dados) || {}; const lista = catalogo()[cat] || [];
+    const atual = d.codigo || localStorage.getItem('sv_ult_' + cat) || lista[0] || '';
+    UI.modal(title, `${cabPos(s)}
+      <div class="field"><label>Categoria</label><select class="inp" id="sv-cat" onchange="SV.trocaCat(this.value)">${Object.keys(CAT).map(k => `<option value="${k}" ${k === cat ? 'selected' : ''}>${CAT[k].n}</option>`).join('')}</select></div>
+      <div class="field"><label>Placa (código e nome)</label><input class="inp" id="sv-busca" placeholder="🔎 filtrar: ex. 19, curva, lombada" oninput="SV.buscar()" style="margin-bottom:6px">
+        <select class="inp" id="sv-cod" size="5" style="height:auto">${lista.map(x => `<option ${x === atual ? 'selected' : ''}>${esc(x)}</option>`).join('')}${lista.includes(atual) || !atual ? '' : `<option selected>${esc(atual)}</option>`}<option value="__outro">Outro (digitar)…</option></select>
+        <input class="inp" id="sv-outro" style="margin-top:6px;display:none" placeholder="ex.: R-15 Altura máxima permitida"></div>
+      <div class="field"><label>Texto / valor na placa</label><input class="inp" id="sv-leg" value="${esc(d.legenda || '')}" placeholder="ex.: 80 km/h, Ribeirão Preto 12 km"></div>
+      ${chipsLado()}${chipsEstado()}
+      <div class="fgrid">
+        <div class="field"><label>Largura (m)</label><input class="inp" id="sv-lg" inputmode="decimal" value="${d.larg ? nf(d.larg, 2) : ''}"></div>
+        <div class="field"><label>Altura da placa (m)</label><input class="inp" id="sv-al" inputmode="decimal" value="${d.alt ? nf(d.alt, 2) : ''}"></div>
+        <div class="field"><label>Altura livre (m)</label><input class="inp" id="sv-hl" inputmode="decimal" value="${d.altLivre ? nf(d.altLivre, 2) : ''}"></div>
+        <div class="field"><label>Afastamento (m)</label><input class="inp" id="sv-af" inputmode="decimal" value="${d.afast ? nf(d.afast, 2) : ''}"></div>
+        <div class="field"><label>Suporte</label><select class="inp" id="sv-sup">${SUPORTES.map(x => `<option ${x === (d.suporte || localStorage.getItem('sv_ult_sup')) ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Película</label><select class="inp" id="sv-pel">${PELICULAS.map(x => `<option ${x === d.pelicula ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      </div>
+      <div class="field" style="margin-top:12px"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2">${esc(ev ? ev.obs : '')}</textarea></div>
+      ${blocoFoto()}
+      <button class="btn-full" onclick="SV.salvarPlaca()">✓ Salvar placa</button>`);
+    $('sv-cod').onchange = () => { $('sv-outro').style.display = val('sv-cod') === '__outro' ? 'block' : 'none'; };
+    marcar();
+  }
+  function formSeg(title, ev, elem, isFim) {
+    const s = Core.S(); const d = (ev && ev.dados) || {};
+    UI.modal(title, `${cabPos(s)}
+      ${isFim ? '' : `${chipsLado()}<div class="field"><label>Tipo</label><select class="inp" id="sv-st">${SEGS[elem].tipos.map(x => `<option ${x === d.tipo ? 'selected' : ''}>${x}</option>`).join('')}</select></div>`}
+      ${chipsEstado()}
+      <div class="field"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2" placeholder="${isFim ? 'ex.: terminal ausente, lâmina amassada no km...' : ''}">${esc(ev ? ev.obs : '')}</textarea></div>
+      ${blocoFoto()}
+      <button class="btn-full" onclick="SV.salvarSeg('${elem}', ${isFim ? 1 : 0})">✓ ${isFim ? 'Salvar fim do trecho' : 'Iniciar trecho'}</button>`);
+    marcar();
+  }
+  function formDisp(title, ev) {
+    const s = Core.S(); const d = (ev && ev.dados) || {};
+    UI.modal(title, `${cabPos(s)}
+      <div class="field"><label>Dispositivo</label><select class="inp" id="sv-dp">${DISP.map(x => `<option ${x === (ev ? ev.rotulo : '') ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      ${chipsLado()}${chipsEstado()}
+      <div class="field"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2">${esc(ev ? ev.obs : '')}</textarea></div>
+      ${blocoFoto()}
+      <button class="btn-full" onclick="SV.salvarDisp()">✓ Salvar dispositivo</button>`);
+    marcar();
+  }
+  function iniciaForm(s) { frozen = Core.pos(s); editId = null; fotos = []; estado = 'Bom'; lado = (s.params && s.params.lados === 'Esquerdo') ? 'E' : 'D'; }
+  function numOrNull(id) { const v = num(id); return isNaN(v) ? null : v; }
+  function salvar(data) {
+    const s = Core.S();
+    if (editId) { const ev = s.eventos.find(e => e.id === editId); Object.assign(ev, data, { fotos: fotos.slice() }); Core.updateEvent(ev); }
+    else { const ev = Core.addEvent(Object.assign(data, { fotos: fotos.slice() }), frozen); toast(Core.codigo(s, ev) + ' · ' + data.rotulo + ' · ' + estado); }
+    editId = null; fotos = []; UI.closeModal();
+  }
+
+  window.SV = {
+    placa(c) { const s = Core.S(); if (!s) return; iniciaForm(s); cat = c; formPlaca('🪧 ' + CAT[c].n, null); },
+    trocaCat(c) { cat = c; const keep = { legenda: val('sv-leg') }; const ev = editId ? Core.S().eventos.find(e => e.id === editId) : null; formPlaca($('mg-title').innerHTML, ev ? Object.assign({}, ev, { dados: Object.assign({}, ev.dados, { codigo: '' }, keep) }) : { obs: val('sv-obs'), dados: keep }); },
+    buscar() {
+      const q = val('sv-busca').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const lista = catalogo()[cat] || [];
+      const f = lista.filter(x => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
+      $('sv-cod').innerHTML = f.map((x, i) => `<option ${i === 0 ? 'selected' : ''}>${esc(x)}</option>`).join('') + '<option value="__outro">Outro (digitar)…</option>';
+    },
+    lado(k) { lado = k; marcar(); },
+    estado(i) { estado = ESTADOS[i].v; marcar(); },
+    filtrar(v) { filtroTela = v; UI.renderEvents(); M.atualizar(Core.S()); },
+    async foto() {
+      const s = Core.S(); if (!s) return;
+      const evRef = editId ? s.eventos.find(e => e.id === editId) : Object.assign({}, frozen, { seq: (s.seq || 0) + 1 });
+      evRef.fotos = fotos;
+      const tit = $('sv-cod') ? (val('sv-cod') === '__outro' ? val('sv-outro') : val('sv-cod')) : $('sv-dp') ? val('sv-dp') : $('mg-title').textContent;
+      const name = await Photo.capture(s, evRef, Photo.linhasPadrao(s, frozen, tit, [LADOS[lado] ? 'Lado ' + LADOS[lado].toLowerCase() : '', 'Estado: ' + estado, val('sv-obs').trim()]));
+      if (name) { fotos.push(name); marcar(); }
+    },
+    salvarPlaca() {
+      let cod = val('sv-cod'); if (cod === '__outro' || !cod) cod = val('sv-outro').trim();
+      if (!cod) { toast('Escolha ou digite a placa'); return; }
+      if (val('sv-cod') !== '__outro') localStorage.setItem('sv_ult_' + cat, cod);
+      localStorage.setItem('sv_ult_sup', val('sv-sup'));
+      salvar({ grupo: 'placa', cod: cat, rotulo: cod, obs: val('sv-obs').trim(),
+        dados: { cat, codigo: cod, legenda: val('sv-leg').trim(), lado, estado, larg: numOrNull('sv-lg'), alt: numOrNull('sv-al'), altLivre: numOrNull('sv-hl'), afast: numOrNull('sv-af'), suporte: val('sv-sup'), pelicula: val('sv-pel') } });
+    },
+    iniSeg(elem) { const s = Core.S(); if (!s) return; iniciaForm(s); formSeg('▶ Início ' + SEGS[elem].n.toLowerCase(), null, elem, false); },
+    fimSeg(sid) {
+      const s = Core.S(); if (!s) return;
+      const t = abertosAgora(s).find(x => x.sid === sid); if (!t) return;
+      iniciaForm(s); estado = t.estado || 'Bom';
+      // o fim é gravado na hora (posição do toque); o formulário só completa estado, foto e observação
+      const ev = Core.addEvent({ grupo: 'seg', cod: t.elem, rotulo: 'Fim ' + SEGS[t.elem].n.toLowerCase() + ' · ' + LADOS[t.lado].toLowerCase(), dados: { sid, ini: false, elem: t.elem, estado } }, frozen);
+      buzz(40); beep(900);
+      editId = ev.id; frozen = ev;
+      formSeg('⏹ Fim ' + SEGS[t.elem].n.toLowerCase() + ' · ' + nf(Math.abs(ev.d - t.ini.d), 0) + ' m', ev, t.elem, true);
+    },
+    salvarSeg(elem, isFim) {
+      if (isFim) {
+        const s = Core.S(); const ev = s.eventos.find(e => e.id === editId);
+        ev.dados.estado = estado; ev.obs = val('sv-obs').trim(); ev.fotos = fotos.slice();
+        // o estado do trecho é o informado no fim (vistoria do trecho inteiro)
+        const ini = s.eventos.find(e => e.grupo === 'seg' && e.dados.ini && e.dados.sid === ev.dados.sid); if (ini) ini.dados.estado = estado;
+        Core.updateEvent(ev); editId = null; fotos = []; UI.closeModal(); toast('Trecho fechado'); return;
+      }
+      if (editId) { const ev = Core.S().eventos.find(e => e.id === editId); salvar({ rotulo: 'Início ' + SEGS[elem].n.toLowerCase() + ' · ' + LADOS[lado].toLowerCase(), obs: val('sv-obs').trim(), dados: Object.assign({}, ev.dados, { lado, tipo: val('sv-st'), estado }) }); return; }
+      salvar({ grupo: 'seg', cod: elem, rotulo: 'Início ' + SEGS[elem].n.toLowerCase() + ' · ' + LADOS[lado].toLowerCase(), obs: val('sv-obs').trim(),
+        dados: { sid: uid(), ini: true, elem, lado, tipo: val('sv-st'), estado } });
+    },
+    disp() { const s = Core.S(); if (!s) return; iniciaForm(s); formDisp('🛡️ Dispositivo', null); },
+    salvarDisp() {
+      salvar({ grupo: 'disp', cod: 'DISP', rotulo: val('sv-dp'), obs: val('sv-obs').trim(), dados: { lado, estado } });
+    },
+    // ── catálogo de placas editável ──
+    editarCatalogo() {
+      const c = catalogo();
+      UI.modal('✏️ Catálogo de placas', `<p class="help" style="margin:-6px 0 10px">Um item por linha, no formato “código nome”. Vale para as próximas placas registradas.</p>
+        <div class="field"><label>Categoria</label><select class="inp" id="cat-sel" onchange="SV.catMostra()">${Object.keys(CAT).map(k => `<option value="${k}">${CAT[k].n}</option>`).join('')}</select></div>
+        <textarea class="inp" id="cat-txt" rows="12" style="font-size:13px"></textarea>
+        <button class="btn-full" style="margin-top:12px" onclick="SV.catSalvar()">✓ Salvar categoria</button>
+        <button class="btn-full gray" style="margin-top:8px" onclick="SV.catPadrao()">↺ Voltar ao catálogo padrão desta categoria</button>`);
+      SV._cat = c; SV.catMostra();
+    },
+    catMostra() { $('cat-txt').value = (SV._cat[val('cat-sel')] || []).join('\n'); },
+    catSalvar() {
+      const k = val('cat-sel'); const l = val('cat-txt').split('\n').map(x => x.trim()).filter(Boolean);
+      const salvo = Store.readJSON('Config/sv_catalogo.json', {}) || {}; salvo[k] = l; Store.writeJSON('Config/sv_catalogo.json', salvo);
+      SV._cat[k] = l; toast(CAT[k].n + ': ' + l.length + ' placas');
+    },
+    catPadrao() {
+      const k = val('cat-sel'); const salvo = Store.readJSON('Config/sv_catalogo.json', {}) || {}; delete salvo[k]; Store.writeJSON('Config/sv_catalogo.json', salvo);
+      SV._cat[k] = CATALOGO_PADRAO[k]; SV.catMostra();
+    },
+    _trechos: trechos,
+  };
+  Modules.register(M);
+})();

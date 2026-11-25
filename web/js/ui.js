@@ -87,10 +87,21 @@ const UI = (function () {
     });
     g.innerHTML = h;
   }
+  // só troca os números (não recria os botões, para não perder um toque em "zerar")
+  function atualizaParciais(s) {
+    const g = $('parc-grid'); if (!g) return;
+    const boxes = g.querySelectorAll('.parc');
+    if (boxes.length !== s.parciais.length + 1) { renderParciais(); return; }
+    const ds = [s.dist].concat(s.parciais.map(p => Math.max(0, s.dist - p.base)));
+    boxes.forEach((b, i) => {
+      b.querySelector('.parc-km').innerHTML = nf(ds[i] / 1000, 3) + ' <small>km</small>';
+      b.querySelector('.parc-est').textContent = fmtEst(ds[i], s) + ' est · ' + nf(ds[i], 1) + ' m';
+    });
+  }
   function renderEvents() {
     const s = Core.S(); if (!s) return; const m = Core.M(s);
     const html = !s.eventos.length ? '<div class="empty-pts">Nenhum registro nesta sessão.</div>'
-      : s.eventos.slice().reverse().slice(0, 200).map(ev => {
+      : s.eventos.filter(ev => !(m && m.filtroLista) || m.filtroLista(ev)).slice().reverse().slice(0, 200).map(ev => {
         const foto = (ev.fotos || [])[0];
         return `<div class="pt-item">
           <div class="ev-ico">${Core.codigo(s, ev)}</div>
@@ -114,8 +125,11 @@ const UI = (function () {
     const m = Core.M(s);
     confirm('Remover registro?', Core.codigo(s, ev) + ' · ' + esc(m && m.titulo ? m.titulo(ev) : ev.rotulo), () => { Core.removeEvent(id); toast('Registro removido'); }, '🗑️ Remover');
   }
+  let _parcT = 0;
   function onOdo() {
     const s = Core.S(); const r = $('sec-rec-txt');
+    // parciais acompanham a distância (no máximo 2x por segundo)
+    if (s && Date.now() - _parcT > 500) { _parcT = Date.now(); atualizaParciais(s); }
     if (s && r) r.textContent = 'Gravando trajeto · ' + s.track.length + ' coords';
     if (s) { const m = Core.M(s); if (m && m.onOdo) m.onOdo(s); }
   }

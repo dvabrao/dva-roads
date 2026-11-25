@@ -299,3 +299,4 @@ select.inp{appearance:auto;}
 .sh-state b{color:var(--blue);}
 .sh-btn .sh-pat-ico{width:34px;height:34px;flex-shrink:0;}
 .sh-btn span{display:block;}
+.sv-ico svg{width:34px;height:34px;display:block;}

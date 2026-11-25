@@ -10,8 +10,9 @@ const Export = (function () {
   function base(s) { return slug((s.rodovia ? s.rodovia + '_' : '') + s.nome) + '_' + stamp(s.ini); }
 
   // ── KML ─────────────────────────────────────────────────────
-  function kml(s, comFotos) {
+  function kml(s, comFotos, filtro) {
     const m = Core.M(s);
+    const passa = (ev) => !filtro || !m || !m.passaFiltro || m.passaFiltro(ev, filtro);
     const head = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <name>${esc(s.nome)} — ${esc(m ? m.nome : '')}</name>
@@ -29,10 +30,10 @@ ${m && m.kmlEstilos ? m.kmlEstilos(s, kmlColor) : ''}\n`;
       k += `<Placemark><name>Trajeto (${nf(s.dist / 1000, 3)} km)</name><styleUrl>#trk</styleUrl><LineString><tessellate>1</tessellate><coordinates>\n`
         + s.track.map(p => p[1] + ',' + p[0] + ',0').join('\n') + `\n</coordinates></LineString></Placemark>\n`;
     }
-    if (m && m.kmlExtra) k += m.kmlExtra(s, { trechoTrack, kmlColor });
+    if (m && m.kmlExtra) k += m.kmlExtra(s, { trechoTrack, kmlColor, filtro });
     k += '<Folder><name>Registros</name>\n';
     s.eventos.forEach(ev => {
-      if (ev.lat == null) return;
+      if (ev.lat == null || !passa(ev)) return;
       const cod = Core.codigo(s, ev);
       const titulo = m && m.titulo ? m.titulo(ev) : ev.rotulo;
       const fotos = comFotos ? (ev.fotos || []).map(f => `<br><img src="fotos/${f}" width="480"/>`).join('') : '';
@@ -64,7 +65,7 @@ ${m && m.kmlEstilos ? m.kmlEstilos(s, kmlColor) : ''}\n`;
   }
   function tabelaPadrao(s, m, ctx) {
     const cols = s.modo === 'cor' ? 2 : 1;
-    const rows = s.eventos.map(ev => `<tr>
+    const rows = (ctx.eventos || s.eventos).map(ev => `<tr>
       <td class="c b nw">${Core.codigo(s, ev)}</td>
       <td><b>${esc(m && m.titulo ? m.titulo(ev) : ev.rotulo)}</b>${m && m.descricao ? '<br>' + esc(m.descricao(ev, s)) : ''}${ev.obs ? '<br><i>' + esc(ev.obs) + '</i>' : ''}</td>
       ${s.modo !== 'est' ? `<td class="c nw">${ev.km != null ? fmtKm(ev.km) : '—'}</td>` : ''}
@@ -77,7 +78,7 @@ ${m && m.kmlEstilos ? m.kmlEstilos(s, kmlColor) : ''}\n`;
   }
   function report(s, opts) {
     opts = opts || {}; const m = Core.M(s);
-    const ctx = { fotos: opts.fotos !== false, foto: (f) => Photo.src(s, f), tabelaPadrao: () => tabelaPadrao(s, m, ctx) };
+    const ctx = { fotos: opts.fotos !== false, foto: (f) => Photo.src(s, f), filtro: opts.filtro || '', tabelaPadrao: (evs) => tabelaPadrao(s, m, Object.assign({}, ctx, { eventos: evs })) };
     const corpo = m && m.relatorio ? m.relatorio(s, ctx) : tabelaPadrao(s, m, ctx);
     return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(s.nome)} — Relatório ${APP.nome}</title><style>
@@ -108,7 +109,8 @@ ${corpo}
     if (!list.length) { toast('Nenhuma sessão para exportar'); return; }
     pasta = pasta || (Core.S() ? Core.S().pasta : list[0].pasta);
     UI.modal('📤 Exportar sessão', `
-      <div class="field"><label>Sessão</label><select class="inp" id="exp-sec">${list.map(s => `<option value="${esc(s.pasta)}" ${s.pasta === pasta ? 'selected' : ''}>${esc(s.nome)} · ${fmtDT(s.ini)}</option>`).join('')}</select></div>
+      <div class="field"><label>Sessão</label><select class="inp" id="exp-sec" onchange="Export.filtroUI()">${list.map(s => `<option value="${esc(s.pasta)}" ${s.pasta === pasta ? 'selected' : ''}>${esc(s.nome)} · ${fmtDT(s.ini)}</option>`).join('')}</select></div>
+      <div class="field" id="exp-f-wrap" style="display:none"><label>Filtrar por estado de conservação</label><select class="inp" id="exp-filtro"></select></div>
       <div class="exp-btn-list">
         <button class="exp-opt" onclick="Export.go('pdf')"><span class="ico">📄</span><div><div class="lbl">Relatório PDF</div><div class="sub">Abre a impressão · “Salvar como PDF”</div></div></button>
         <button class="exp-opt" onclick="Export.go('kml')"><span class="ico">🗺️</span><div><div class="lbl">KML</div><div class="sub">Trajeto e registros · Google Earth / Maps</div></div></button>
@@ -116,27 +118,36 @@ ${corpo}
         <button class="exp-opt" onclick="Export.go('html')"><span class="ico">🌐</span><div><div class="lbl">Relatório HTML</div><div class="sub">WhatsApp / Drive / e-mail</div></div></button>
         <button class="exp-opt" onclick="Export.go('zip')"><span class="ico">💾</span><div><div class="lbl">Backup da sessão (.zip)</div><div class="sub">Tudo: dados, trajeto, fotos · envie ao Google Drive</div></div></button>
       </div>`);
+    filtroUI();
+  }
+  // módulos com estado de conservação (ex.: SV) oferecem filtro no relatório e no KML
+  function filtroUI() {
+    const r = Core.index().find(x => x.pasta === val('exp-sec')); const m = r && Modules.get(r.modulo);
+    const w = $('exp-f-wrap'); if (!w) return;
+    if (m && m.filtros) { $('exp-filtro').innerHTML = m.filtros().map(f => `<option value="${esc(f.v)}">${esc(f.t)}</option>`).join(''); w.style.display = 'block'; }
+    else { $('exp-filtro').innerHTML = ''; w.style.display = 'none'; }
   }
   async function go(tipo) {
     const pasta = val('exp-sec'); const s = sessaoPor(pasta); if (!s) { toast('Sessão não encontrada'); return; }
+    const filtro = val('exp-filtro');
     UI.closeModal();
     if (Core.S() && Core.S().pasta === pasta) Core.persist(Core.S(), true);
-    const dir = Core.dirOf(s) + '/export/'; const b = base(s);
+    const dir = Core.dirOf(s) + '/export/'; const b = base(s) + (filtro ? '_' + slug(filtro) : '');
     if (tipo === 'zip') { await Core.backup(pasta); return; }
     if (tipo === 'kml') {
-      Store.writeText(dir + b + '.kml', kml(s, false));
+      Store.writeText(dir + b + '.kml', kml(s, false, filtro));
       Store.copyToDownloads(dir + b + '.kml', 'Exportacoes');
       Store.share(dir + b + '.kml', 'application/vnd.google-earth.kml+xml'); return;
     }
     if (tipo === 'kmz') {
-      const zip = new JSZip(); zip.file('doc.kml', kml(s, true));
+      const zip = new JSZip(); zip.file('doc.kml', kml(s, true, filtro));
       s.eventos.forEach(ev => (ev.fotos || []).forEach(f => { const x = Store.readB64(Core.dirOf(s) + '/fotos/' + f); if (x) zip.file('fotos/' + f, x, { base64: true }); }));
       const z = await zip.generateAsync({ type: 'base64' });
       Store.writeB64(dir + b + '.kmz', z);
       Store.copyToDownloads(dir + b + '.kmz', 'Exportacoes');
       Store.share(dir + b + '.kmz', 'application/vnd.google-earth.kmz'); return;
     }
-    const html = report(s);
+    const html = report(s, { filtro });
     Store.writeText(dir + b + '.html', html);
     if (tipo === 'html') { Store.copyToDownloads(dir + b + '.html', 'Exportacoes'); Store.share(dir + b + '.html', 'text/html'); return; }
     if (tipo === 'pdf') {
@@ -146,5 +157,5 @@ ${corpo}
     }
   }
 
-  return { kml, report, open, go, trechoTrack, kmlColor };
+  return { kml, report, open, go, filtroUI, trechoTrack, kmlColor };
 })();
