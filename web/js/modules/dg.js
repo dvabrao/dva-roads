@@ -9,6 +9,7 @@
   const DIR = 'Diagramacao', ARQ = DIR + '/projetos.json';
   let projetos = [], atual = null, carregado = false, timer = null, ultimo = null;
   const SETAS = [['', '—'], ['E', '←'], ['IE', '↖'], ['F', '↑'], ['ID', '↗'], ['D', '→']];
+  const SETAS_C = [['E', '←'], ['IE', '↖'], ['F', '↑'], ['ID', '↗'], ['D', '→'], ['BE', '↙'], ['B', '↓'], ['BD', '↘']];
   const ALTURAS = [100, 125, 150, 175, 200, 250, 300, 350, 400];
 
   function carregaScript(src) {
@@ -25,6 +26,9 @@
   const salvarLista = () => Store.writeJSON(ARQ, projetos);
   const novoTexto = () => ({ id: uid(), nome: 'Placa ' + (projetos.length + 1), t: Date.now(),
     P: { tipo: 'texto', esquema: 'verde', classe: 'II', modular: true, linhas: [{ texto: 'Ribeirão Preto', h: 200, serie: 'auto', seta: 'D', dist: '', escudo: '', tarja: false }] } });
+  const novaComposta = (codigo, extras) => ({ id: uid(), nome: 'Placa ' + (projetos.length + 1), t: Date.now(),
+    P: { tipo: 'composta', esquema: /^R/.test(codigo || 'A') ? 'branco' : 'amarelo', classe: 'II', arranjo: 'linha', modular: false,
+      itens: [{ k: 'picto', codigo: codigo || 'A-18', h: 600, alinh: 'centro' }, { k: 'seta', dir: 'BD', h: 200, alinh: 'fim' }].concat(extras || []) } });
   const novoCatalogo = () => ({ id: uid(), nome: 'Placa ' + (projetos.length + 1), t: Date.now(), P: { tipo: 'placa', codigo: 'R-19', tipoTam: 'I', valor: '80', compl: '' } });
 
   // ── tela ──────────────────────────────────────────────────────
@@ -63,13 +67,14 @@
   const miniatura = (p) => { try { return DGMotor.svg(DGMotor.desenhar(p.P)); } catch (e) { return ''; } };
   function lista() {
     tela(`<div class="dg-h"><b>📐 SV · Diagramação</b><button onclick="DG.fechar()">✕</button></div><div class="dg-c">
-      <div class="dg-exp" style="grid-template-columns:1fr 1fr 1fr;margin:0 0 12px">
+      <div class="dg-exp" style="grid-template-columns:1fr 1fr;margin:0 0 12px">
         <button onclick="DG.novo('texto')">✏️ Placa de texto</button>
         <button onclick="DG.novo('placa')">🛑 Catálogo R / A</button>
+        <button onclick="DG.novo('composta')">▭ Retangular com sinal</button>
         <button onclick="DG.daFoto()" style="background:#FFD740;color:#111D3D">📷 Da foto (IA)</button></div>
       <p class="help" style="font-size:12.5px;margin:0 0 10px">Diagramação conforme o Manual de Sinalização Rodoviária do DER-SP (Vol. II): alfabetos séries D e E(M), espaçamentos de 3/4 da altura da letra, setas, escudos, orlas e modulação das placas. Placas R e A com o desenho vetorial do manual.</p>
       ${projetos.length ? projetos.slice().reverse().map(p => `<div class="dg-item" onclick="DG.editar('${p.id}')"><div class="th">${miniatura(p)}</div>
-        <div class="tx"><b>${esc(p.nome)}</b><br>${p.P.tipo === 'placa' ? esc(p.P.codigo) : esc((DGMotor.ESQUEMAS[p.P.esquema] || {}).n || '')}<br><span style="color:#5B6B82">${fmtDT(p.t)}</span></div>
+        <div class="tx"><b>${esc(p.nome)}</b><br>${p.P.tipo === 'placa' ? esc(p.P.codigo) : p.P.tipo === 'composta' ? 'Retangular · ' + esc((p.P.itens.find(i => i.k === 'picto') || {}).codigo || '') : esc((DGMotor.ESQUEMAS[p.P.esquema] || {}).n || '')}<br><span style="color:#5B6B82">${fmtDT(p.t)}</span></div>
         <button class="dg-mini" onclick="event.stopPropagation();DG.excluir('${p.id}')">🗑</button></div>`).join('')
         : '<p class="help" style="text-align:center;padding:30px 0">Nenhuma placa ainda.</p>'}</div>`);
   }
@@ -107,14 +112,42 @@
         <div class="dg-cat" id="dg-cat">${gradeCat(P)}</div></div>
       <div class="fgrid"><div class="field"><label>Tamanho (DER)</label><select class="inp" onchange="DG.setP('tipoTam',this.value)">${Object.entries(DGMotor.TAMANHOS).map(([k, v]) => `<option value="${k}" ${P.tipoTam === k ? 'selected' : ''}>Tipo ${k} · ${v} mm</option>`).join('')}</select></div>
         ${P.codigo === 'R-19' ? `<div class="field"><label>Velocidade (km/h)</label><input class="inp" inputmode="numeric" value="${esc(P.valor || '')}" oninput="DG.setP('valor',this.value)"></div>` : ''}</div>
+      <button class="btn-full gray" style="margin-bottom:10px" onclick="DG.retangular()">▭ Fazer placa retangular com este sinal (sinal + seta)</button>
       <div class="field"><label>Placa complementar (opcional, uma linha por linha)</label><textarea class="inp" rows="2" placeholder="ex.: A 300 m" oninput="DG.setP('compl',this.value)">${esc(P.compl || '')}</textarea></div>`;
+  }
+  const ALT_P = [300, 400, 450, 500, 600, 700, 800, 900, 1000];
+  function itemHTML(it, i, n) {
+    const top = `<div class="r" style="margin-top:0"><b style="flex:1;font-size:13px">${it.k === 'picto' ? '🛑 Sinal' : it.k === 'seta' ? '➜ Seta' : '🔤 Texto'}</b>
+      <button class="dg-mini" onclick="DG.moverI(${i},-1)" ${i ? '' : 'disabled'}>${'◀'}</button><button class="dg-mini" onclick="DG.moverI(${i},1)" ${i < n - 1 ? '' : 'disabled'}>▶</button><button class="dg-mini" onclick="DG.removerI(${i})">✕</button></div>`;
+    const al = `<select class="inp" onchange="DG.setI(${i},'alinh',this.value)">${[['inicio', 'Alinhar no início'], ['centro', 'Centralizado'], ['fim', 'Alinhar no fim']].map(([v, t]) => `<option value="${v}" ${(it.alinh || 'centro') === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`;
+    let corpo = '';
+    if (it.k === 'picto') corpo = `<div class="r"><input class="inp" value="${esc(it.codigo || '')}" placeholder="Código (ex.: A-18)" oninput="DG.setI(${i},'codigo',this.value.toUpperCase().trim())">
+        <select class="inp" onchange="DG.setI(${i},'h',+this.value)">${ALT_P.map(h => `<option value="${h}" ${+it.h === h ? 'selected' : ''}>altura ${h} mm</option>`).join('')}</select></div><div class="r">${al}</div>`;
+    else if (it.k === 'seta') corpo = `<div class="r"><div class="dg-st" style="flex-wrap:wrap">${SETAS_C.map(([v, t]) => `<button class="${it.dir === v ? 'on' : ''}" onclick="DG.setI(${i},'dir','${v}',true)">${t}</button>`).join('')}</div></div>
+        <div class="r"><select class="inp" onchange="DG.setI(${i},'h',+this.value)">${ALTURAS.map(h => `<option value="${h}" ${+it.h === h ? 'selected' : ''}>tamanho h ${h}</option>`).join('')}</select>${al}</div>`;
+    else corpo = `<div class="r"><input class="inp" value="${esc(it.texto || '')}" placeholder="Texto (ex.: A 200 m, LOMBADA)" oninput="DG.setI(${i},'texto',this.value)"></div>
+        <div class="r"><select class="inp" onchange="DG.setI(${i},'h',+this.value)">${ALTURAS.map(h => `<option value="${h}" ${+it.h === h ? 'selected' : ''}>h ${h} mm</option>`).join('')}</select>${al}</div>`;
+    return `<div class="dg-ln">${top}${corpo}</div>`;
+  }
+  function formComposta(P) {
+    return `<div class="fgrid">
+        <div class="field"><label>Cores</label><select class="inp" onchange="DG.setP('esquema',this.value)">${Object.entries(DGMotor.ESQUEMAS).map(([k, e]) => `<option value="${k}" ${P.esquema === k ? 'selected' : ''}>${esc(e.n)}</option>`).join('')}</select></div>
+        <div class="field"><label>Arranjo</label><select class="inp" onchange="DG.setP('arranjo',this.value,true)"><option value="linha" ${P.arranjo !== 'coluna' ? 'selected' : ''}>Lado a lado</option><option value="coluna" ${P.arranjo === 'coluna' ? 'selected' : ''}>Um embaixo do outro</option></select></div></div>
+      <div class="card-label" style="margin:6px 0">Elementos (na ordem em que aparecem)</div>
+      ${P.itens.map((it, i) => itemHTML(it, i, P.itens.length)).join('')}
+      <div style="display:flex;gap:6px"><button class="btn-full gray" style="flex:1" onclick="DG.addI('picto')">+ Sinal</button><button class="btn-full gray" style="flex:1" onclick="DG.addI('seta')">+ Seta</button><button class="btn-full gray" style="flex:1" onclick="DG.addI('texto')">+ Texto</button></div>
+      <p class="help" style="font-size:12px;margin:6px 0">Códigos com desenho: R-1 a R-40 e A-1a a A-48 (DER-SP). Ex.: A-18 lombada, A-32b passagem de pedestres.</p>
+      <div class="card-label" style="margin:12px 0 6px">Dimensões da placa</div>
+      <div class="fgrid"><div class="field"><label>Largura fixa (mm)</label><input class="inp" inputmode="numeric" value="${P.L || ''}" placeholder="automática" oninput="DG.setP('L',+this.value||null)"></div>
+        <div class="field"><label>Altura fixa (mm)</label><input class="inp" inputmode="numeric" value="${P.H || ''}" placeholder="automática" oninput="DG.setP('H',+this.value||null)"></div>
+        <div class="field"><label>Espaço entre elementos (mm)</label><input class="inp" inputmode="numeric" value="${P.gap || ''}" placeholder="automático" oninput="DG.setP('gap',+this.value||null)"></div></div>`;
   }
   function editor() {
     const p = atual;
     tela(`<div class="dg-h"><button onclick="DG.voltar()">‹</button><b>📐 ${esc(p.nome)}</b><button onclick="DG.renomear()">✏️</button></div><div class="dg-c">
       <div class="dg-prev"><div id="dg-svg"></div><div class="dg-dim" id="dg-dim"></div><div class="dg-av" id="dg-av"></div></div>
       <div class="dg-exp"><button onclick="DG.exportar('jpg')">JPG</button><button onclick="DG.exportar('pdf')">PDF</button><button onclick="DG.exportar('dxf')">DXF</button><button onclick="DG.exportar('wmf')">WMF</button></div>
-      <div style="margin-top:12px">${p.P.tipo === 'placa' ? formPlaca(p.P) : formTexto(p.P)}</div>
+      <div style="margin-top:12px">${p.P.tipo === 'placa' ? formPlaca(p.P) : p.P.tipo === 'composta' ? formComposta(p.P) : formTexto(p.P)}</div>
       ${p.ia ? `<p class="help" style="font-size:12px;margin-top:10px">🤖 Lido da foto pela IA${p.ia.obs ? ': ' + esc(p.ia.obs) : ''}. Confira textos e setas.</p>` : ''}</div>`);
     desenhar();
   }
@@ -178,6 +211,14 @@
     const cods = window.DG_PICTOS || {};
     if (r.tipo === 'placa' && cods[r.codigo]) return { id: uid(), nome: r.codigo + (r.valor ? ' ' + r.valor : ''), t: Date.now(), ia: { obs: r.observacoes || '' },
       P: { tipo: 'placa', codigo: r.codigo, tipoTam: 'I', valor: r.valor || '', compl: (r.complementar || '').trim() } };
+    if (r.tipo === 'composta') {
+      const cod = cods[r.pictograma] ? r.pictograma : (cods[r.codigo] ? r.codigo : 'A-18');
+      const its = [{ k: 'picto', codigo: cod, h: 600, alinh: 'centro' }];
+      (r.setas || (r.seta ? [r.seta] : [])).forEach(d => { if (['E', 'IE', 'F', 'ID', 'D', 'BE', 'B', 'BD'].includes(d)) its.push({ k: 'seta', dir: d, h: 200, alinh: /^B/.test(d) ? 'fim' : 'centro' }); });
+      (r.linhas || []).forEach(l => { if ((l.texto || '').trim()) its.push({ k: 'texto', texto: l.texto.trim(), h: 150, alinh: 'centro' }); });
+      return { id: uid(), nome: cod + ' retangular', t: Date.now(), ia: { obs: r.observacoes || '' },
+        P: { tipo: 'composta', esquema: DGMotor.ESQUEMAS[r.esquema] ? r.esquema : (/^R/.test(cod) ? 'branco' : 'amarelo'), classe: 'II', arranjo: r.arranjo === 'coluna' ? 'coluna' : 'linha', modular: false, itens: its } };
+    }
     const classe = DGMotor.CLASSES[r.classe] ? r.classe : 'II', h = DGMotor.CLASSES[classe].hPadrao;
     const esquema = DGMotor.ESQUEMAS[r.esquema] ? r.esquema : 'verde';
     const linhas = (r.linhas || []).slice(0, 5).map(l => ({ texto: l.texto || '', h: esquema === 'branco' || esquema === 'laranja' ? Math.min(h, 150) : h, serie: 'auto',
@@ -193,7 +234,7 @@
       projetos = Store.readJSON(ARQ, []) || []; lista();
     },
     fechar, voltar() { atual = null; lista(); }, grade: (q) => gradeCat(atual.P, q),
-    novo(tipo) { const p = tipo === 'placa' ? novoCatalogo() : novoTexto(); projetos.push(p); atual = p; salvarLista(); editor(); },
+    novo(tipo) { const p = tipo === 'placa' ? novoCatalogo() : tipo === 'composta' ? novaComposta() : novoTexto(); projetos.push(p); atual = p; salvarLista(); editor(); },
     editar(id) { atual = projetos.find(p => p.id === id); if (atual) editor(); },
     excluir(id) { const p = projetos.find(x => x.id === id); UI.confirm('Excluir placa?', esc(p ? p.nome : ''), () => { projetos = projetos.filter(x => x.id !== id); salvarLista(); lista(); }, '🗑️ Excluir'); },
     renomear() { const n = prompt('Nome da placa', atual.nome); if (n && n.trim()) { atual.nome = n.trim(); salvarLista(); editor(); } },
@@ -206,6 +247,14 @@
     addLinha() { const l = atual.P.linhas; l.push({ texto: '', h: (l[l.length - 1] || {}).h || 200, serie: 'auto', seta: '', dist: '', escudo: '', tarja: false }); editor(); },
     mover(i, d) { const l = atual.P.linhas; const j = i + d; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; editor(); },
     remover(i) { atual.P.linhas.splice(i, 1); if (!atual.P.linhas.length) atual.P.linhas.push({ texto: '', h: 200 }); editor(); },
+    setI(i, k, v, redesenhaForm) { atual.P.itens[i][k] = v; if (redesenhaForm) editor(); else agenda(); },
+    addI(k) { atual.P.itens.push(k === 'picto' ? { k, codigo: 'A-18', h: 600, alinh: 'centro' } : k === 'seta' ? { k, dir: 'BD', h: 200, alinh: 'fim' } : { k, texto: '', h: 150, alinh: 'centro' }); editor(); },
+    moverI(i, d) { const l = atual.P.itens; const j = i + d; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; editor(); },
+    removerI(i) { atual.P.itens.splice(i, 1); editor(); },
+    retangular() {
+      const P = atual.P; const extras = (P.compl || '').split('\n').filter(t => t.trim()).map(t => ({ k: 'texto', texto: t.trim(), h: 150, alinh: 'centro' }));
+      const n = novaComposta(P.codigo, extras); n.nome = atual.nome + ' retangular'; projetos.push(n); atual = n; salvarLista(); editor();
+    },
     exportar, daFoto, foto,
   };
 

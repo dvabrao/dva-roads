@@ -122,7 +122,7 @@ const DGMotor = (function () {
     // apontando para cima, base no (0,0), y para cima
     return [[0, f], [a / 2, f - b], [d / 2, f - b + e], [d / 2, 0], [-d / 2, 0], [-d / 2, f - b + e], [-a / 2, f - b]];
   }
-  const ANG = { F: 0, D: -90, E: 90, ID: -45, IE: 45, B: 180 };
+  const ANG = { F: 0, D: -90, E: 90, ID: -45, IE: 45, B: 180, BD: -135, BE: 135 };
   function seta(dir, h) {
     const ang = (ANG[dir] || 0) * Math.PI / 180, cs = Math.cos(ang), sn = Math.sin(ang);
     let p = setaPoly(h).map(([x, y]) => [x * cs - y * sn, -(x * sn + y * cs)]); // gira e inverte y (tela)
@@ -255,7 +255,51 @@ const DGMotor = (function () {
     return { L, H, calc: { L: Math.round(L), H: Math.round(H) }, avisos, camadas: cams };
   }
 
-  function desenhar(P) { return P.tipo === 'placa' ? placaCatalogo(P) : placaTexto(P); }
+  // ── placa composta retangular: sinal R/A + setas + textos (ex.: lombada com seta ↘) ──
+  function pictoEm(cod, h) {
+    const pic = (window.DG_PICTOS || {})[cod]; if (!pic) return null;
+    const S = h / pic.h;
+    return { w: pic.w * S, h: pic.h * S, camadas: pic.c.map(c => ({ cor: c.cor, paths: xf(c.paths, ([x, y]) => [x * S, y * S]) })) };
+  }
+  function placaComposta(P) {
+    const cl = CLASSES[P.classe] || CLASSES.II, es = ESQUEMAS[P.esquema] || ESQUEMAS.amarelo, avisos = [];
+    const C = cl.orla + cl.afast;
+    const its = (P.itens || []).map(it => {
+      const h = +it.h || 200;
+      if (it.k === 'picto') { const pc = pictoEm(it.codigo, h); if (!pc) { avisos.push('Sinal ' + (it.codigo || '?') + ' sem desenho.'); return null; } return { it, w: pc.w, h: pc.h, u: 0.2 * h, pc }; }
+      if (it.k === 'seta') { const st = seta(it.dir || 'BD', h); return { it, w: st.w, h: st.h, u: h, st }; }
+      const tx = (it.texto || '').trim(); if (!tx) return null;
+      const sr = serieDe(tx, it.serie); return { it, w: larguraTexto(tx, sr, h), h, u: h, sr, tx };
+    }).filter(Boolean);
+    if (!its.length) return { L: 800, H: 400, avisos: ['Acrescente um sinal, seta ou texto.'], camadas: [] };
+    const u = Math.max(...its.map(i => i.u)), gap = +P.gap || u, mg = 0.75 * u;
+    const linha = (P.arranjo || 'linha') === 'linha';
+    const Wi = linha ? its.reduce((a, i) => a + i.w, 0) + gap * (its.length - 1) : Math.max(...its.map(i => i.w));
+    const Hi = linha ? Math.max(...its.map(i => i.h)) : its.reduce((a, i) => a + i.h, 0) + gap * (its.length - 1);
+    let L = Wi + 2 * (mg + C), H = Hi + 2 * (mg + C); const calc = { L: Math.round(L), H: Math.round(H) };
+    if (P.modular) { L = Math.ceil(L / cl.modH - 1e-6) * cl.modH; H = Math.ceil(H / cl.modV - 1e-6) * cl.modV; }
+    if (+P.L) { if (+P.L < calc.L) avisos.push('Largura informada menor que a necessária (' + calc.L + ' mm).'); L = +P.L; }
+    if (+P.H) { if (+P.H < calc.H) avisos.push('Altura informada menor que a necessária (' + calc.H + ' mm).'); H = +P.H; }
+    const cams = [{ nome: 'FUNDO', cor: es.fundo, paths: [rrect(0, 0, L, H, 50)] },
+      { nome: 'ORLA', cor: es.tinta, paths: [rrect(cl.afast, cl.afast, L - 2 * cl.afast, H - 2 * cl.afast, 50 - cl.afast), rrect(C, C, L - 2 * C, H - 2 * C, Math.max(5, 50 - C))] }];
+    const tinta = [];
+    // conteúdo centralizado na área interna; alinhamento de cada item na direção transversal
+    const ix0 = C + mg, iy0 = C + mg, iw = L - 2 * (C + mg), ih = H - 2 * (C + mg);
+    let x = ix0 + (linha ? (iw - Wi) / 2 : 0), y = iy0 + (linha ? 0 : (ih - Hi) / 2);
+    its.forEach(i => {
+      const al = i.it.alinh || 'centro';
+      const px = linha ? x : ix0 + (al === 'inicio' ? 0 : al === 'fim' ? iw - i.w : (iw - i.w) / 2);
+      const py = linha ? iy0 + (al === 'inicio' ? 0 : al === 'fim' ? ih - i.h : (ih - i.h) / 2) : y;
+      if (i.pc) i.pc.camadas.forEach(c => cams.push({ nome: 'SINAL_' + c.cor.toUpperCase(), cor: c.cor, paths: mover(c.paths, px, py) }));
+      else if (i.st) tinta.push(...mover(i.st.paths, px, py));
+      else tinta.push(...contornosTexto(i.tx, i.sr, i.h, px, py));
+      if (linha) x += i.w + gap; else y += i.h + gap;
+    });
+    if (tinta.length) cams.push({ nome: 'TEXTO_SETAS', cor: es.tinta, paths: tinta });
+    return { L, H, calc, avisos, camadas: cams };
+  }
+
+  function desenhar(P) { return P.tipo === 'placa' ? placaCatalogo(P) : P.tipo === 'composta' ? placaComposta(P) : placaTexto(P); }
 
   // ── exportação ────────────────────────────────────────────────
   const dPath = (paths, k, f) => paths.map(p => 'M' + p.map(([x, y]) => (x * k).toFixed(f) + ' ' + (y * k).toFixed(f)).join('L') + 'Z').join('');
@@ -304,8 +348,9 @@ const DGMotor = (function () {
     const L = []; const g = (c, v) => L.push(String(c), String(v));
     g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4);
     g(9, '$EXTMIN'); g(10, 0); g(20, 0); g(9, '$EXTMAX'); g(10, d.L.toFixed(1)); g(20, d.H.toFixed(1)); g(0, 'ENDSEC');
-    g(0, 'SECTION'); g(2, 'TABLES'); g(0, 'TABLE'); g(2, 'LAYER'); g(70, d.camadas.length);
-    d.camadas.forEach(c => { g(0, 'LAYER'); g(2, c.nome); g(70, 0); g(62, ACI[c.cor] || 7); g(6, 'CONTINUOUS'); });
+    const lay = []; d.camadas.forEach(c => { if (!lay.some(l => l.nome === c.nome)) lay.push(c); });
+    g(0, 'SECTION'); g(2, 'TABLES'); g(0, 'TABLE'); g(2, 'LAYER'); g(70, lay.length);
+    lay.forEach(c => { g(0, 'LAYER'); g(2, c.nome); g(70, 0); g(62, ACI[c.cor] || 7); g(6, 'CONTINUOUS'); });
     g(0, 'ENDTAB'); g(0, 'ENDSEC');
     g(0, 'SECTION'); g(2, 'ENTITIES');
     d.camadas.forEach(c => c.paths.forEach(p => {

@@ -68,6 +68,10 @@ Observação do técnico: """${String(b.texto || '').slice(0, 500)}"""
 
 Se for placa de REGULAMENTAÇÃO (R-...) ou ADVERTÊNCIA (A-...) do Manual Brasileiro de Sinalização de Trânsito, use tipo "placa" e informe o código
 (ex.: "R-19", "A-2a"); para R-19 informe a velocidade em "valor"; se houver placa complementar embaixo (ex.: "A 300 m"), coloque o texto em "complementar".
+Se for placa RETANGULAR que contém um sinal de regulamentação ou advertência desenhado dentro (ex.: losango da lombada A-18) junto com seta(s)
+e/ou texto, use tipo "composta": "pictograma" com o código do sinal, "setas" com as direções na ordem da esquerda para a direita
+(E, IE, F, ID, D, BE inclinada para baixo à esquerda, B para baixo, BD inclinada para baixo à direita), "linhas" com textos, "esquema" (amarelo, branco...)
+e "arranjo" ("linha" se os elementos estão lado a lado, "coluna" se um embaixo do outro).
 Caso contrário (indicação/orientação de destino, serviços, educativa, turística, obras), use tipo "texto":
 - "esquema": verde (localidades), azul (rodovias/apoio operacional), marrom (turístico), branco (educativa), amarelo, laranja (obras);
 - "classe": "0" (pista dupla/expressa, placas grandes), "Ib" ou "II" (pista simples) — estime;
@@ -75,7 +79,7 @@ Caso contrário (indicação/orientação de destino, serviços, educativa, tur�
   "seta" (E esquerda, IE inclinada à esquerda, F em frente, ID inclinada à direita, D direita, ou vazio),
   "dist" (ex.: "12 km", "500 m", ou vazio), "escudo" (ex.: "SP 330", "BR 050", ou vazio) e "tarja" (true se houver linha divisória abaixo dela).
 Responda SOMENTE com JSON:
-{"tipo":"texto|placa","codigo":"","valor":"","complementar":"","esquema":"","classe":"","linhas":[{"texto":"","seta":"","dist":"","escudo":"","tarja":false}],"observacoes":"o que não deu para ler"}`;
+{"tipo":"texto|placa|composta","codigo":"","pictograma":"","setas":[],"arranjo":"linha","valor":"","complementar":"","esquema":"","classe":"","linhas":[{"texto":"","seta":"","dist":"","escudo":"","tarja":false}],"observacoes":"o que não deu para ler"}`;
 }
 
 function extraiJSON(t) {
