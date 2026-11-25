@@ -37,3 +37,10 @@ Backups e exportações também são copiados para `Downloads/DVA Roads/`.
 ## Novo módulo
 
 Crie `web/js/modules/<id>.js` chamando `Modules.register({...})` e inclua o script no `index.html`.
+
+## Servidor (Cloudflare Worker)
+
+`servidor/worker.js` roda em https://dva-roads.dvabrao.workers.dev (plano gratuito).
+Variáveis no painel da Cloudflare (Workers › dva-roads › Settings › Variables and Secrets):
+`GEMINI_KEY` (secreta) · opcional `PROVEDOR=claude` + `ANTHROPIC_KEY` · `GEMINI_MODELO` / `CLAUDE_MODELO`.
+Rota `POST /ia/verificar` só atende apps com licença válida.

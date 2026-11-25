@@ -99,6 +99,7 @@ td{padding:5px 6px;border-top:1px solid #ccc;vertical-align:top;color:#111}tr.ln
 </style></head><body><div class="content">
 ${cabecalho(s, m)}
 ${corpo}
+${typeof IA !== 'undefined' ? IA.relatorio(s) : ''}
 <div class="rod"><span>${s.eventos.length} registro(s) · ${s.track.length} coordenadas de trajeto</span><span>${APP.nome} · gerado em ${fmtDT(Date.now())}</span></div>
 </div></body></html>`;
   }

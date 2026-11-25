@@ -50,6 +50,8 @@ const License = (function () {
       if (!l) return null;
       return { cliente: l.c, validade: l.v, vencida: l.v && l.v < h, admin: (l.m || []).includes('*') };
     },
+    /** Chave (texto) que libera o módulo, para o servidor conferir */
+    raw(mod) { const h = hoje(); const l = lic.find(l => (!l.v || l.v >= h) && (l.m || []).some(x => x === '*' || x === mod)); return l ? l.raw : ''; },
     admin() { return lic.some(l => (l.m || []).includes('*')); },
     async activate(raw) {
       const d = await verify(raw);

@@ -150,6 +150,17 @@
     </div>
   </div>
 
+  <div class="acc-item" id="acc-ia">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-ia')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">🤖</span><div class="acc-hdr-info"><span class="acc-hdr-title">Verificação por IA</span><span class="acc-hdr-sub">Servidor DVA Roads</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body">
+      <div class="field"><label>Endereço do servidor</label><input class="inp" id="set-iaurl" onchange="UI.saveSettings()"></div>
+      <p class="help">A foto e a descrição vão para o servidor DVA Roads, que consulta a IA e responde se a sinalização está conforme a norma. Precisa de internet.</p>
+    </div>
+  </div>
+
   <div class="acc-item" id="acc-sobre">
     <div class="acc-hdr" onclick="UI.toggleAcc('acc-sobre')">
       <div class="acc-hdr-left"><span class="acc-hdr-icon">ℹ️</span><div class="acc-hdr-info"><span class="acc-hdr-title">Sobre o aplicativo</span><span class="acc-hdr-sub">Versão e informações</span></div></div>
@@ -188,6 +199,7 @@
 <script src="js/core.js"></script>
 <script src="js/photo.js"></script>
 <script src="js/export.js"></script>
+<script src="js/ia.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/modules/marcozero.js"></script>
 <script src="js/modules/slir.js"></script>

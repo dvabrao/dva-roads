@@ -66,6 +66,7 @@ const UI = (function () {
           <button class="btn-sm r" onclick="Core.askEnd()">🏁 Encerrar</button>
           <button class="btn-sm n" onclick="Export.open()">📤 Exportar</button></div></div></div>
       <div id="mod-panel">${m && m.painel ? m.painel(s) : ''}</div>
+      <button class="btn-full navy" style="margin:-2px 0 12px" onclick="IA.abrir()">🤖 Verificar com IA · foto + descrição</button>
       ${coll('parc', 'Odômetros parciais', '<div class="parc-grid" id="parc-grid"></div>', '<button class="lnk" onclick="event.stopPropagation();Core.addParcial()">+ Parcial</button>')}
       <div class="card hide-on-tablet"><div class="card-label">Registros da sessão</div><div class="pts-list" id="ev-list"></div></div>
       ${coll('goto', 'Ir até / Converter', `<div class="seg"><button id="gt-km" onclick="Core.setGotoTipo('km')">KM</button><button id="gt-est" onclick="Core.setGotoTipo('est')">Estaca</button></div>
@@ -113,7 +114,7 @@ const UI = (function () {
             <div class="pt-coords">${fmtCoord(ev.lat, ev.lon)} · ${fmtH(ev.t)}</div>
           </div>
           ${foto ? `<img class="photo-thumb" src="${Photo.src(s, foto)}" alt="">` : ''}
-          ${m && m.editar ? `<button class="pt-edit" onclick="Modules.get('${m.id}').editar('${ev.id}')">✏️</button>` : ''}
+          ${ev.grupo === 'ia' ? `<button class="pt-edit" onclick="IA.editar('${ev.id}')">🤖</button>` : m && m.editar ? `<button class="pt-edit" onclick="Modules.get('${m.id}').editar('${ev.id}')">✏️</button>` : ''}
           <button class="pt-del" onclick="UI.askDelEvent('${ev.id}')">🗑</button></div>`;
       }).join('');
     if ($('ev-list')) $('ev-list').innerHTML = html;
@@ -138,7 +139,7 @@ const UI = (function () {
   function openSettings() {
     $('set-unidade').value = settings.unidade; $('set-est').value = nf(settings.est, 2).replace(',00', '');
     $('set-kmfmt').value = settings.kmfmt; $('set-spd').value = settings.spd; $('set-coord').value = settings.coord;
-    $('set-acc').value = String(settings.acc); $('set-path').textContent = Store.base() + '/Sessoes';
+    $('set-acc').value = String(settings.acc); $('set-iaurl').value = IA.url(); $('set-path').textContent = Store.base() + '/Sessoes';
     renderLicencas();
     $('settings-panel').classList.add('open');
   }
@@ -146,7 +147,7 @@ const UI = (function () {
   function saveSettings() {
     const e = parseNum(val('set-est'));
     settings.unidade = val('set-unidade'); settings.est = e > 0 ? e : 20; settings.kmfmt = val('set-kmfmt');
-    settings.spd = val('set-spd'); settings.coord = val('set-coord'); settings.acc = parseInt(val('set-acc')) || 40;
+    settings.spd = val('set-spd'); settings.coord = val('set-coord'); settings.acc = parseInt(val('set-acc')) || 40; settings.iaUrl = val('set-iaurl').trim() || IA.URL_PADRAO;
     saveSettingsLS(); render();
   }
   function renderLicencas() {
