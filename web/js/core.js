@@ -154,6 +154,7 @@ const Core = (function () {
   function openNew(modId) {
     const m = Modules.get(modId); if (!m) return;
     if (!License.ok(modId)) { UI.alert('Módulo não liberado', 'O módulo ' + m.nome + ' precisa de uma chave de ativação. Abra Configurações › Licenças dos módulos.'); return; }
+    if (m.ferramenta) { m.abrir(); return; }   // ferramentas (ex.: diagramação) não abrem sessão de GPS
     if (ativa) { UI.alert('Já existe uma sessão aberta', 'Encerre a sessão “' + ativa.nome + '” antes de abrir outra.'); return; }
     nsState = { modo: settings.unidade || 'cor', dir: 'C' };
     const n = index.filter(x => x.modulo === modId).length + 1;

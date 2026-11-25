@@ -5,6 +5,7 @@
 //  · POST /ia/verificar  { chave, modulo, imagem(base64 jpeg), texto, contexto }
 //      → { conforme, resumo, itens:[{elemento, situacao, problema, norma, recomendacao, gravidade}], limites }
 //  · POST /nuvem/sessao, /nuvem/foto — o app envia sessões e fotos (banco D1, binding "DB")
+//  · POST /ia/diagramar { chave, imagem, texto } → leitura da placa para o módulo de diagramação
 //  · GET  /painel — painel web do inventário (login pela chave de licença; cada cliente vê só o que é dele)
 //  Variáveis: PROVEDOR = "gemini" (padrão) | "claude"
 //             GEMINI_MODELO (opcional; se ocupado tenta outros modelos gratuitos) · CLAUDE_MODELO (padrão claude-haiku-5-5)
@@ -60,6 +61,23 @@ Responda SOMENTE com JSON neste formato:
  "limites":"o que não foi possível avaliar"}`;
 }
 
+// leitura de placa para o módulo de diagramação
+function promptDiagramar(b) {
+  return `Você é projetista de sinalização viária no Brasil (DER-SP e CONTRAN). Leia a PLACA da foto e descreva-a para ser redesenhada.
+Observação do técnico: """${String(b.texto || '').slice(0, 500)}"""
+
+Se for placa de REGULAMENTAÇÃO (R-...) ou ADVERTÊNCIA (A-...) do Manual Brasileiro de Sinalização de Trânsito, use tipo "placa" e informe o código
+(ex.: "R-19", "A-2a"); para R-19 informe a velocidade em "valor"; se houver placa complementar embaixo (ex.: "A 300 m"), coloque o texto em "complementar".
+Caso contrário (indicação/orientação de destino, serviços, educativa, turística, obras), use tipo "texto":
+- "esquema": verde (localidades), azul (rodovias/apoio operacional), marrom (turístico), branco (educativa), amarelo, laranja (obras);
+- "classe": "0" (pista dupla/expressa, placas grandes), "Ib" ou "II" (pista simples) — estime;
+- "linhas": de cima para baixo, até 5; cada linha com "texto" exatamente como escrito (respeite maiúsculas e acentos),
+  "seta" (E esquerda, IE inclinada à esquerda, F em frente, ID inclinada à direita, D direita, ou vazio),
+  "dist" (ex.: "12 km", "500 m", ou vazio), "escudo" (ex.: "SP 330", "BR 050", ou vazio) e "tarja" (true se houver linha divisória abaixo dela).
+Responda SOMENTE com JSON:
+{"tipo":"texto|placa","codigo":"","valor":"","complementar":"","esquema":"","classe":"","linhas":[{"texto":"","seta":"","dist":"","escudo":"","tarja":false}],"observacoes":"o que não deu para ler"}`;
+}
+
 function extraiJSON(t) {
   t = String(t || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
   const i = t.indexOf('{'), j = t.lastIndexOf('}');
@@ -71,7 +89,7 @@ const GEMINI_RESERVA = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemin
 const espera = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function geminiUm(env, b, modelo) {
-  const parts = [{ text: prompt(b) }];
+  const parts = [{ text: b._prompt || prompt(b) }];
   if (b.imagem) parts.push({ inline_data: { mime_type: 'image/jpeg', data: b.imagem } });
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_KEY },
@@ -105,7 +123,7 @@ async function claude(env, b) {
   const modelo = env.CLAUDE_MODELO || 'claude-haiku-5-5';
   const content = [];
   if (b.imagem) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: b.imagem } });
-  content.push({ type: 'text', text: prompt(b) });
+  content.push({ type: 'text', text: b._prompt || prompt(b) });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
     body: JSON.stringify({ model: modelo, max_tokens: 1500, messages: [{ role: 'user', content }] }),
@@ -212,6 +230,16 @@ export default {
         const prov = (env.PROVEDOR || 'gemini').toLowerCase();
         const r = prov === 'claude' ? await claude(env, b) : await gemini(env, b);
         return json(r);
+      } catch (e) { return json({ erro: 'A IA não respondeu: ' + e.message }, 502); }
+    }
+    if (url.pathname === '/ia/diagramar' && req.method === 'POST') {
+      let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }
+      if (!(await licenca(b.chave, 'dg'))) return json({ erro: 'Licença inválida ou vencida para a Diagramação.' }, 403);
+      if (!b.imagem || b.imagem.length > 4_000_000) return json({ erro: 'Foto ausente ou grande demais.' }, 413);
+      b._prompt = promptDiagramar(b);
+      try {
+        const prov = (env.PROVEDOR || 'gemini').toLowerCase();
+        return json(prov === 'claude' ? await claude(env, b) : await gemini(env, b));
       } catch (e) { return json({ erro: 'A IA não respondeu: ' + e.message }, 502); }
     }
     return json({ erro: 'Rota não encontrada.' }, 404);
