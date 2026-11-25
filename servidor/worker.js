@@ -4,11 +4,14 @@
 //  · Só atende apps com licença válida (mesma chave pública do app)
 //  · POST /ia/verificar  { chave, modulo, imagem(base64 jpeg), texto, contexto }
 //      → { conforme, resumo, itens:[{elemento, situacao, problema, norma, recomendacao, gravidade}], limites }
+//  · POST /nuvem/sessao, /nuvem/foto — o app envia sessões e fotos (banco D1, binding "DB")
+//  · GET  /painel — painel web do inventário (login pela chave de licença; cada cliente vê só o que é dele)
 //  Variáveis: PROVEDOR = "gemini" (padrão) | "claude"
 //             GEMINI_MODELO (opcional; se ocupado tenta outros modelos gratuitos) · CLAUDE_MODELO (padrão claude-haiku-5-5)
 // ════════════════════════════════════════════════════════════════
 const PUB = { kty: 'EC', crv: 'P-256', x: 'kvyvNzzQgU2JkaglthbI_WrM1q2eYGW1BFvl25mWbEA', y: '2fvhpRcQTeLAPENlOgBaIAW-PPzSxkk3Rh0x3h1vY_w' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const PAINEL = '__PAINEL__';
 const json = (o, st) => new Response(JSON.stringify(o), { status: st || 200, headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, CORS) });
 
 const b64u = (s) => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return s; };
@@ -22,7 +25,8 @@ async function licenca(raw, modulo) {
   if (!ok) return null;
   const d = JSON.parse(decodeURIComponent(escape(atob(b64u(p[1])))));
   if (d.v && d.v < new Date().toISOString().slice(0, 10)) return null;
-  if (!(d.m || []).some(m => m === '*' || m === modulo)) return null;
+  if (modulo && !(d.m || []).some(m => m === '*' || m === modulo)) return null;
+  d.admin = /\(administrador\)/i.test(d.c || '');
   return d;
 }
 
@@ -111,13 +115,94 @@ async function claude(env, b) {
   return Object.assign(extraiJSON((d.content || []).map(c => c.text || '').join('')), { modelo });
 }
 
+// ── banco (Cloudflare D1) ─────────────────────────────────────────
+let esquemaOk = false;
+async function esquema(db) {
+  if (esquemaOk) return;
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS sessoes (cliente TEXT NOT NULL, id TEXT NOT NULL, modulo TEXT, nome TEXT, rodovia TEXT,
+      tipo TEXT, orgao TEXT, ini INTEGER, fim INTEGER, atualizado INTEGER, nitens INTEGER, meta TEXT, eventos TEXT, trajeto TEXT,
+      PRIMARY KEY (cliente, id))`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS fotos (cliente TEXT NOT NULL, sessao TEXT NOT NULL, nome TEXT NOT NULL, img BLOB,
+      PRIMARY KEY (cliente, sessao, nome))`),
+  ]);
+  esquemaOk = true;
+}
+const semDB = () => json({ erro: 'Banco de dados do servidor ainda não configurado.' }, 503);
+
+async function nuvemSessao(env, b) {
+  const s = b.sessao || {};
+  const lic = await licenca(b.chave, s.modulo); if (!lic) return json({ erro: 'Licença inválida ou vencida para este módulo.' }, 403);
+  if (!s.id) return json({ erro: 'Sessão sem identificação.' }, 400);
+  const eventos = JSON.stringify(s.eventos || []), trajeto = JSON.stringify(s.trajeto || []);
+  if (eventos.length + trajeto.length > 1_800_000) return json({ erro: 'Sessão grande demais para enviar de uma vez.' }, 413);
+  const meta = Object.assign({}, s); delete meta.eventos; delete meta.trajeto;
+  const p = s.params || {};
+  await env.DB.prepare(`INSERT OR REPLACE INTO sessoes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+    lic.c, s.id, s.modulo || '', s.nome || '', s.rodovia || '', p.tipo || '', p.orgao || '', s.ini || 0, s.fim || null,
+    Date.now(), (s.eventos || []).length, JSON.stringify(meta), eventos, trajeto).run();
+  const r = await env.DB.prepare('SELECT nome FROM fotos WHERE cliente=? AND sessao=?').bind(lic.c, s.id).all();
+  const tem = new Set((r.results || []).map(x => x.nome));
+  const todas = [].concat(...(s.eventos || []).map(e => e.fotos || []));
+  return json({ ok: true, cliente: lic.c, faltam: todas.filter(f => !tem.has(f)) });
+}
+async function nuvemFoto(env, b) {
+  const lic = await licenca(b.chave, b.modulo); if (!lic) return json({ erro: 'Licença inválida.' }, 403);
+  if (!b.b64 || b.b64.length > 1_500_000) return json({ erro: 'Foto inválida ou grande demais.' }, 413);
+  const bin = Uint8Array.from(atob(b.b64), c => c.charCodeAt(0));
+  await env.DB.prepare('INSERT OR REPLACE INTO fotos VALUES (?,?,?,?)').bind(lic.c, String(b.sessao), String(b.nome), bin).run();
+  return json({ ok: true });
+}
+// painel: o administrador vê todos os clientes; os demais só os próprios dados
+async function api(env, rota, b) {
+  const lic = await licenca(b.chave); if (!lic) return json({ erro: 'Chave inválida ou vencida.' }, 403);
+  const cli = lic.admin ? (b.cliente || null) : lic.c;
+  if (rota === 'login') return json({ cliente: lic.c, admin: lic.admin, modulos: lic.m, validade: lic.v });
+  if (rota === 'sessoes') {
+    const q = `SELECT cliente,id,modulo,nome,rodovia,tipo,orgao,ini,fim,atualizado,nitens FROM sessoes ${cli ? 'WHERE cliente=?' : ''} ORDER BY ini DESC`;
+    const r = await (cli ? env.DB.prepare(q).bind(cli) : env.DB.prepare(q)).all();
+    return json({ sessoes: r.results || [] });
+  }
+  if (rota === 'dados') {
+    const ids = (b.ids || []).slice(0, 200); if (!ids.length) return json({ sessoes: [] });
+    const marks = ids.map(() => '?').join(',');
+    const q = `SELECT cliente,id,modulo,nome,rodovia,tipo,orgao,ini,fim,meta,eventos,trajeto FROM sessoes WHERE id IN (${marks})${cli ? ' AND cliente=?' : ''}`;
+    const r = await env.DB.prepare(q).bind(...ids, ...(cli ? [cli] : [])).all();
+    return json({ sessoes: (r.results || []).map(x => Object.assign(x, { meta: JSON.parse(x.meta || '{}'), eventos: JSON.parse(x.eventos || '[]'), trajeto: b.trajeto ? JSON.parse(x.trajeto || '[]') : [] })) });
+  }
+  if (rota === 'foto') {
+    const c = lic.admin ? b.cliente : lic.c;
+    const r = await env.DB.prepare('SELECT img FROM fotos WHERE cliente=? AND sessao=? AND nome=?').bind(c, String(b.sessao), String(b.nome)).first();
+    if (!r) return json({ erro: 'Foto não enviada.' }, 404);
+    return new Response(new Uint8Array(r.img), { headers: Object.assign({ 'Content-Type': 'image/jpeg', 'Cache-Control': 'private, max-age=86400' }, CORS) });
+  }
+  if (rota === 'excluir') {
+    const c = lic.admin ? b.cliente : lic.c;
+    await env.DB.batch([env.DB.prepare('DELETE FROM sessoes WHERE cliente=? AND id=?').bind(c, b.id), env.DB.prepare('DELETE FROM fotos WHERE cliente=? AND sessao=?').bind(c, b.id)]);
+    return json({ ok: true });
+  }
+  return json({ erro: 'Rota não encontrada.' }, 404);
+}
+
 export default {
   async fetch(req, env) {
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     const url = new URL(req.url);
     if (url.pathname === '/' || url.pathname === '/status') {
       const prov = (env.PROVEDOR || 'gemini').toLowerCase();
-      return json({ ok: true, servico: 'DVA Roads', provedor: prov, iaConfigurada: prov === 'claude' ? !!env.ANTHROPIC_KEY : !!env.GEMINI_KEY });
+      return json({ ok: true, servico: 'DVA Roads', provedor: prov, iaConfigurada: prov === 'claude' ? !!env.ANTHROPIC_KEY : !!env.GEMINI_KEY, banco: !!env.DB });
+    }
+    if (url.pathname === '/painel' || url.pathname === '/painel/') return new Response(PAINEL, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    if (url.pathname.startsWith('/nuvem/') || url.pathname.startsWith('/api/')) {
+      if (req.method !== 'POST') return json({ erro: 'Use POST.' }, 405);
+      if (!env.DB) return semDB();
+      let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }
+      try {
+        await esquema(env.DB);
+        if (url.pathname === '/nuvem/sessao') return await nuvemSessao(env, b);
+        if (url.pathname === '/nuvem/foto') return await nuvemFoto(env, b);
+        return await api(env, url.pathname.slice(5), b);
+      } catch (e) { return json({ erro: 'Erro no servidor: ' + e.message }, 500); }
     }
     if (url.pathname === '/ia/verificar' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }

@@ -89,6 +89,19 @@
       if (ev.grupo === 'seg') return d.ini ? [LADOS[d.lado], d.tipo, d.estado].filter(Boolean).join(' · ') : 'Fim do trecho' + (d.estado ? ' · ' + d.estado : '');
       return [LADOS[d.lado], d.legenda ? '“' + d.legenda + '”' : '', d.larg && d.alt ? nf(d.larg, 2) + ' × ' + nf(d.alt, 2) + ' m' : '', d.suporte, d.estado].filter(Boolean).join(' · ');
     },
+    // campos legíveis para o painel web
+    paraNuvem(s, ev) {
+      const d = ev.dados || {};
+      const nf2 = (v) => v == null ? null : String(v).replace('.', ',');
+      if (ev.grupo === 'placa') return { categoria: 'Placa · ' + ((CAT[d.cat] || {}).n || d.cat || ''), item: ev.rotulo, figura: codDe(ev.rotulo), ladoTxt: LADOS[d.lado] || '',
+        detalhes: [d.legenda && 'Texto: ' + d.legenda, d.suporte, d.pelicula && d.pelicula !== 'Não verificada' ? 'Película ' + d.pelicula.toLowerCase() : '',
+          d.larg || d.alt ? 'Placa ' + (nf2(d.larg) || '?') + ' × ' + (nf2(d.alt) || '?') + ' m' : '', d.altLivre ? 'Altura livre ' + nf2(d.altLivre) + ' m' : '', d.afast ? 'Afastamento ' + nf2(d.afast) + ' m' : ''].filter(Boolean).join(' · ') };
+      if (ev.grupo === 'seg') { const t = trechos(s).find(x => x.sid === d.sid);
+        return { categoria: (SEGS[d.elem || (t && t.elem)] || {}).n || 'Defensa / barreira', item: ev.rotulo, ladoTxt: LADOS[d.lado || (t && t.lado)] || '',
+          detalhes: t ? [t.tipo, 'Extensão ' + nf(t.len, 1) + ' m', t.fim ? '' : 'trecho em aberto'].filter(Boolean).join(' · ') : '' }; }
+      if (ev.grupo === 'disp') return { categoria: 'Dispositivo de segurança', item: ev.rotulo, ladoTxt: LADOS[d.lado] || '' };
+      return {};
+    },
     iconeEvento: (ev) => {
       const e = estadoDe(ev);
       const dot = e ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${corEst(e)};margin-right:2px"></span>` : '';

@@ -117,6 +117,7 @@ ${typeof IA !== 'undefined' ? IA.relatorio(s) : ''}
         <button class="exp-opt" onclick="Export.go('kml')"><span class="ico">🗺️</span><div><div class="lbl">KML</div><div class="sub">Trajeto e registros · Google Earth / Maps</div></div></button>
         <button class="exp-opt" onclick="Export.go('kmz')"><span class="ico">📦</span><div><div class="lbl">KMZ com fotos</div><div class="sub">Um arquivo só, fotos dentro dos pontos</div></div></button>
         <button class="exp-opt" onclick="Export.go('html')"><span class="ico">🌐</span><div><div class="lbl">Relatório HTML</div><div class="sub">WhatsApp / Drive / e-mail</div></div></button>
+        <button class="exp-opt" onclick="Nuvem.enviar(val('exp-sec'))"><span class="ico">☁️</span><div><div class="lbl">Enviar ao painel web</div><div class="sub">Inventário no computador · mapa, filtros e Excel</div></div></button>
         <button class="exp-opt" onclick="Export.go('zip')"><span class="ico">💾</span><div><div class="lbl">Backup da sessão (.zip)</div><div class="sub">Tudo: dados, trajeto, fotos · envie ao Google Drive</div></div></button>
       </div>`);
     filtroUI();
