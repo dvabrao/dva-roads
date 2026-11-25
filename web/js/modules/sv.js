@@ -100,10 +100,10 @@
     camposAbertura(u) {
       u = u || {};
       const sel = (id, o, v) => `<select class="inp" id="${id}">${o.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
-      return `<div class="fsec">Inventário</div>
+      return `<div class="fsec">Tipo de levantamento</div>
+        <div class="field">${sel('sv-tipo', ['Cadastro inicial', 'Inventário', 'Vistoria de conservação'], u.tipo || 'Inventário')}</div>
         <div class="field"><label>Órgão ou concessionária</label><input class="inp" id="sv-org" value="${esc(u.orgao || '')}" placeholder="ex.: DER-SP, concessionária..."></div>
         <div class="fgrid">
-          <div class="field"><label>Tipo de levantamento</label>${sel('sv-tipo', ['Cadastro inicial', 'Inventário', 'Vistoria de conservação'], u.tipo || 'Inventário')}</div>
           <div class="field"><label>Contrato / referência</label><input class="inp" id="sv-ref" value="${esc(u.ref || '')}"></div>
           <div class="field"><label>Pista</label>${sel('sv-pista', ['Simples', 'Dupla'], u.pista || 'Simples')}</div>
           <div class="field"><label>Lados levantados</label>${sel('sv-lados', ['Direito', 'Esquerdo', 'Ambos'], u.lados || 'Direito')}</div>

@@ -5,9 +5,9 @@
 const Photo = (function () {
   const MAX = 1600, Q = 0.82;
 
-  function pick() {
+  function pick(galeria) {
     return new Promise(resolve => {
-      const inp = $('cam-in');
+      const inp = $(galeria ? 'gal-in' : 'cam-in');
       inp.value = '';
       inp.onchange = () => resolve(inp.files && inp.files[0] ? inp.files[0] : null);
       inp.click();
@@ -55,8 +55,13 @@ const Photo = (function () {
    * Abre a câmera, grava a foto com legenda na pasta da sessão.
    * Retorna o nome do arquivo (ex.: "P004_1.jpg") ou null se cancelado.
    */
-  async function capture(s, ev, lines) {
-    const file = await pick(); if (!file) return null;
+  async function capture(s, ev, lines, opts) {
+    opts = opts || {};
+    const file = await pick(opts.galeria); if (!file) return null;
+    if (opts.galeria) {
+      // foto da galeria: a data/hora da legenda é a do arquivo, e fica indicado que não foi tirada no ponto
+      lines = lines.slice(0, -1).concat([{ text: 'Foto da galeria · ' + new Date(file.lastModified || Date.now()).toLocaleString('pt-BR'), color: '#FFD740' }]);
+    }
     const im = await loadImg(file);
     const k = Math.min(1, MAX / Math.max(im.naturalWidth, im.naturalHeight));
     const w = Math.round(im.naturalWidth * k), h = Math.round(im.naturalHeight * k);

@@ -33,7 +33,7 @@ const IA = (function () {
   }
   function renderFoto() {
     const s = Core.S(); const b = $('ia-cam'); if (!b) return;
-    b.className = 'btn-cam' + (foto ? ' has' : ''); b.textContent = foto ? '📷 Trocar foto' : '📷 Tirar foto do local';
+    b.className = 'btn-cam' + (foto ? ' has' : ''); b.textContent = foto ? '📷 Tirar outra' : '📷 Tirar foto';
     $('ia-prev').innerHTML = foto ? `<img class="photo-prev" src="${Photo.src(s, foto)}">` : '';
   }
   function abrir(ev) {
@@ -42,7 +42,7 @@ const IA = (function () {
     const r = ev && ev.dados ? ev.dados.resultado : null;
     UI.modal('🤖 Verificação por IA', `
       <div class="preview-fmt" style="margin-bottom:10px">${esc(posTxt(s, frozen) + ' · ' + fmtCoord(frozen.lat, frozen.lon))}</div>
-      <div class="field"><button class="btn-cam" id="ia-cam" onclick="IA.foto()">📷 Tirar foto do local</button><div id="ia-prev"></div></div>
+      <div class="field"><div style="display:flex;gap:8px"><button class="btn-cam" id="ia-cam" style="flex:1" onclick="IA.foto()">📷 Tirar foto</button><button class="btn-cam" style="flex:1" onclick="IA.foto(true)">🖼️ Da galeria</button></div><div id="ia-prev"></div></div>
       <div class="field"><label>Descrição do local</label><textarea class="inp" id="ia-txt" rows="4" placeholder="Toque no 🎤 do teclado e fale: o que está vendo, o que acha que está errado...">${esc(ev ? ev.obs : '')}</textarea></div>
       <button class="btn-full" id="ia-go" onclick="IA.enviar()">🤖 Verificar se está conforme a norma</button>
       <div id="ia-res">${htmlResultado(r)}</div>`);
@@ -70,10 +70,10 @@ const IA = (function () {
     if ($('ia-res')) { $('ia-res').innerHTML = htmlResultado(r); btn.disabled = false; btn.textContent = r.erro ? '🔄 Tentar de novo' : '🔄 Verificar de novo'; }
     if (!r.erro) { buzz(60); toast('🤖 ' + (TXT[r.conforme] || 'Análise pronta')); }
   }
-  async function tirarFoto() {
+  async function tirarFoto(galeria) {
     const s = Core.S(); if (!s) return;
     const ref = editId ? s.eventos.find(e => e.id === editId) : Object.assign({}, frozen, { seq: (s.seq || 0) + 1, fotos: [] });
-    const name = await Photo.capture(s, Object.assign({}, ref, { fotos: foto ? [foto] : [] }), Photo.linhasPadrao(s, frozen, 'Verificação de sinalização', [val('ia-txt').trim().slice(0, 60)]));
+    const name = await Photo.capture(s, Object.assign({}, ref, { fotos: foto ? [foto] : [] }), Photo.linhasPadrao(s, frozen, 'Verificação de sinalização', [val('ia-txt').trim().slice(0, 60)]), { galeria: !!galeria });
     if (name) { foto = name; renderFoto(); }
   }
   /** Seção do relatório com as verificações */
