@@ -5,7 +5,7 @@
 //  · POST /ia/verificar  { chave, modulo, imagem(base64 jpeg), texto, contexto }
 //      → { conforme, resumo, itens:[{elemento, situacao, problema, norma, recomendacao, gravidade}], limites }
 //  Variáveis: PROVEDOR = "gemini" (padrão) | "claude"
-//             GEMINI_MODELO (padrão gemini-flash-lite-latest) · CLAUDE_MODELO (padrão claude-haiku-5-5)
+//             GEMINI_MODELO (opcional; se ocupado tenta outros modelos gratuitos) · CLAUDE_MODELO (padrão claude-haiku-5-5)
 // ════════════════════════════════════════════════════════════════
 const PUB = { kty: 'EC', crv: 'P-256', x: 'kvyvNzzQgU2JkaglthbI_WrM1q2eYGW1BFvl25mWbEA', y: '2fvhpRcQTeLAPENlOgBaIAW-PPzSxkk3Rh0x3h1vY_w' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
@@ -62,8 +62,11 @@ function extraiJSON(t) {
   return JSON.parse(i >= 0 ? t.slice(i, j + 1) : t);
 }
 
-async function gemini(env, b) {
-  const modelo = env.GEMINI_MODELO || 'gemini-flash-lite-latest';
+// modelos gratuitos tentados em ordem quando um está sobrecarregado
+const GEMINI_RESERVA = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-flash-latest'];
+const espera = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function geminiUm(env, b, modelo) {
   const parts = [{ text: prompt(b) }];
   if (b.imagem) parts.push({ inline_data: { mime_type: 'image/jpeg', data: b.imagem } });
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
@@ -71,9 +74,27 @@ async function gemini(env, b) {
     body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } }),
   });
   const d = await r.json();
-  if (!r.ok) throw new Error((d.error && d.error.message) || ('Gemini respondeu ' + r.status));
+  if (!r.ok) { const e = new Error((d.error && d.error.message) || ('Gemini respondeu ' + r.status)); e.status = r.status; throw e; }
   const txt = (((d.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text || '').join('') || '';
   return Object.assign(extraiJSON(txt), { modelo });
+}
+
+async function gemini(env, b) {
+  const lista = [env.GEMINI_MODELO].concat(GEMINI_RESERVA).filter((m, i, a) => m && a.indexOf(m) === i);
+  let ultimo;
+  for (const modelo of lista) {
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      try { return await geminiUm(env, b, modelo); }
+      catch (e) {
+        ultimo = e;
+        // 429/500/503 = ocupado ou limite: espera e tenta de novo / próximo modelo; 404 = modelo não existe: próximo
+        if (e.status === 404 || e.status === 400 || e.status === 403) break;
+        if (![429, 500, 503].includes(e.status)) throw e;
+        await espera(1500);
+      }
+    }
+  }
+  throw ultimo;
 }
 
 async function claude(env, b) {
