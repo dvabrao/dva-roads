@@ -22,7 +22,7 @@
   };
   const CATALOGO_PADRAO = {
     // códigos e nomes conforme o índice do MBST, Vol. I e Vol. II (CONTRAN, 2022)
-    R: ['R-1 Parada obrigatória', 'R-2 Dê a preferência', 'R-3 Sentido proibido', 'R-4a Proibido virar à esquerda', 'R-4b Proibido virar à direita', 'R-5a Proibido retornar à esquerda', 'R-5b Proibido retornar à direita', 'R-6a Proibido estacionar', 'R-6b Estacionamento regulamentado', 'R-6c Proibido parar e estacionar', 'R-7 Proibido ultrapassar', 'R-8a Proibido mudar de faixa ou pista de trânsito da esquerda para a direita', 'R-8b Proibido mudar de faixa ou pista de trânsito da direita para a esquerda', 'R-9 Proibido trânsito de caminhões', 'R-10 Proibido trânsito de veículos automotores', 'R-11 Proibido trânsito de veículos de tração animal', 'R-12 Proibido trânsito de bicicletas', 'R-13 Proibido trânsito de tratores e máquinas de obras', 'R-14 Peso bruto total máximo permitido', 'R-15 Altura máxima permitida', 'R-16 Largura máxima permitida', 'R-17 Peso máximo permitido por eixo', 'R-18 Comprimento máximo permitido', 'R-19 Velocidade máxima permitida', 'R-20 Proibido acionar buzina ou sinal sonoro', 'R-21 Alfândega', 'R-22 Uso obrigatório de corrente', 'R-23 Conserve-se à direita', 'R-24a Sentido de circulação da via/pista', 'R-24b Passagem obrigatória', 'R-25a Vire à esquerda', 'R-25b Vire à direita', 'R-25c Siga em frente ou à esquerda', 'R-25d Siga em frente ou à direita', 'R-26 Siga em frente', 'R-27 Ônibus, caminhões e veículos de grande porte mantenham-se à direita', 'R-28 Duplo sentido de circulação', 'R-29 Proibido trânsito de pedestres', 'R-30 Pedestre, ande pela esquerda', 'R-31 Pedestre, ande pela direita', 'R-32 Circulação exclusiva de ônibus', 'R-33 Sentido de circulação na rotatória', 'R-34 Circulação exclusiva de bicicletas', 'R-35a Ciclista, transite à esquerda', 'R-35b Ciclista, transite à direita', 'R-36a Ciclistas à esquerda, pedestres à direita', 'R-36b Pedestres à esquerda, ciclistas à direita', 'R-37 Proibido trânsito de motocicletas, motonetas e ciclomotores', 'R-38 Proibido trânsito de ônibus', 'R-39 Circulação exclusiva de caminhão', 'R-40 Trânsito proibido a carros de mão'],
+    R: ['R-1 Parada obrigatória', 'R-2 Dê a preferência', 'R-3 Sentido proibido', 'R-4a Proibido virar à esquerda', 'R-4b Proibido virar à direita', 'R-5a Proibido retornar à esquerda', 'R-5b Proibido retornar à direita', 'R-6a Proibido estacionar', 'R-6b Estacionamento regulamentado', 'R-6c Proibido parar e estacionar', 'R-7 Proibido ultrapassar', 'R-8a Proibido mudar de faixa ou pista de trânsito da esquerda para a direita', 'R-8b Proibido mudar de faixa ou pista de trânsito da direita para a esquerda', 'R-9 Proibido trânsito de caminhões', 'R-10 Proibido trânsito de veículos automotores', 'R-11 Proibido trânsito de veículos de tração animal', 'R-12 Proibido trânsito de bicicletas', 'R-13 Proibido trânsito de tratores e máquinas de obras', 'R-14 Peso bruto total máximo permitido', 'R-15 Altura máxima permitida', 'R-16 Largura máxima permitida', 'R-17 Peso máximo permitido por eixo', 'R-18 Comprimento máximo permitido', 'R-19 Velocidade máxima permitida', 'R-20 Proibido acionar buzina ou sinal sonoro', 'R-21 Alfândega', 'R-22 Uso obrigatório de corrente', 'R-23 Conserve-se à direita', 'R-24a Sentido de circulação da via/pista', 'R-24b Passagem obrigatória', 'R-25a Vire à esquerda', 'R-25b Vire à direita', 'R-25c Siga em frente ou à esquerda', 'R-25d Siga em frente ou à direita', 'R-26 Siga em frente', 'R-27 Ônibus, caminhões e veículos de grande porte mantenham-se à direita', 'R-28 Duplo sentido de circulação', 'R-29 Proibido trânsito de pedestres', 'R-30 Pedestre, ande pela esquerda', 'R-31 Pedestre, ande pela direita', 'R-32 Circulação exclusiva de ônibus', 'R-33 Sentido de circulação na rotatória', 'R-34 Circulação exclusiva de bicicletas', 'R-35a Ciclista, transite à esquerda', 'R-35b Ciclista, transite à direita', 'R-36a Ciclistas à esquerda, pedestres à direita', 'R-36b Pedestres à esquerda, ciclistas à direita', 'R-37 Proibido trânsito de motocicletas, motonetas e ciclomotores', 'R-38 Proibido trânsito de ônibus', 'R-39 Circulação exclusiva de caminhão', 'R-40 Trânsito proibido a carros de mão', 'R-41 Circulação exclusiva de VLT / bonde', 'R-42a Ciclistas à esquerda, VLT à direita', 'R-42b Ciclistas à direita, VLT à esquerda', 'R-43a Veículos à esquerda, VLT à direita', 'R-43b Veículos à direita, VLT à esquerda', 'R-44 Circulação compartilhada de ciclistas e pedestres'],
     A: ['A-1a Curva acentuada à esquerda', 'A-1b Curva acentuada à direita', 'A-2a Curva à esquerda', 'A-2b Curva à direita', 'A-3a Pista sinuosa à esquerda', 'A-3b Pista sinuosa à direita', 'A-4a Curva acentuada em “S” à esquerda', 'A-4b Curva acentuada em “S” à direita', 'A-5a Curva em “S” à esquerda', 'A-5b Curva em “S” à direita', 'A-6 Cruzamento de vias', 'A-7a Via lateral à esquerda', 'A-7b Via lateral à direita', 'A-8 Interseção em “T”', 'A-9 Bifurcação em “Y”', 'A-10a Entroncamento oblíquo à esquerda', 'A-10b Entroncamento oblíquo à direita', 'A-11a Junções sucessivas contrárias primeira à esquerda', 'A-11b Junções sucessivas contrárias primeira à direita', 'A-12 Interseção em círculo', 'A-13a Confluência à esquerda', 'A-13b Confluência à direita', 'A-14 Semáforo à frente', 'A-15 Parada obrigatória à frente', 'A-16 Bonde / VLT', 'A-17 Pista irregular', 'A-18 Saliência ou lombada', 'A-19 Depressão', 'A-20a Declive acentuado', 'A-20b Aclive acentuado', 'A-21a Estreitamento de pista ao centro', 'A-21b Estreitamento de pista à esquerda', 'A-21c Estreitamento de pista à direita', 'A-21d Alargamento de pista à esquerda', 'A-21e Alargamento de pista à direita', 'A-22 Ponte estreita', 'A-23 Ponte móvel', 'A-24 Obras', 'A-25 Mão dupla adiante', 'A-26a Sentido único', 'A-26b Sentido duplo', 'A-27 Área com desmoronamento', 'A-28 Pista escorregadia', 'A-29 Projeção de cascalho', 'A-30a Trânsito de ciclistas', 'A-30b Passagem sinalizada de ciclistas', 'A-30c Trânsito compartilhado por ciclistas e pedestres', 'A-31 Trânsito de tratores ou maquinária agrícola', 'A-32a Trânsito de pedestres', 'A-32b Passagem sinalizada de pedestres', 'A-33a Área escolar', 'A-33b Passagem sinalizada de escolares', 'A-34 Crianças', 'A-35 Animais', 'A-36 Animais selvagens', 'A-37 Altura limitada', 'A-38 Largura limitada', 'A-39 Passagem de nível sem barreira', 'A-40 Passagem de nível com barreira', 'A-41 Cruz de Santo André', 'A-42a Início de pista dupla', 'A-42b Fim de pista dupla', 'A-42c Pista dividida', 'A-43 Aeroporto', 'A-44 Vento lateral', 'A-45 Rua sem saída', 'A-46 Peso bruto total limitado', 'A-47 Peso limitado por eixo', 'A-48 Comprimento limitado', 'A-49a Pedestres à esquerda, VLT à direita', 'A-49b Pedestres à direita, VLT à esquerda', 'A-50a Veículos à esquerda, VLT à direita', 'A-50b Veículos à direita, VLT à esquerda'],
     I: ['Identificação de rodovia', 'Identificação de município / localidade', 'Distância (km a destinos)', 'Orientação de destino',
       'Pré-sinalização', 'Marco quilométrico', 'Identificação de ponte / curso d’água'],
@@ -36,6 +36,13 @@
   const SEGS = { DEF: { n: 'Defensa metálica', tipos: ['Simples', 'Dupla', 'Semimaleável', 'Maleável'] }, BAR: { n: 'Barreira rígida', tipos: ['New Jersey', 'Perfil F', 'Vertical', 'Simples (meia barreira)'] } };
   const DISP = ['Terminal de defensa', 'Atenuador de impacto', 'Delineador / balizador', 'Marcador de obstáculo', 'Marco quilométrico', 'Pórtico / semipórtico', 'Tela antiofuscante'];
 
+  // figura oficial da placa (índice do MBST); sem figura, usa o ícone da categoria
+  const codDe = (txt) => { const m = String(txt || '').match(/^([RA]-\d+[a-z]?)\b/); return m ? m[1] : null; };
+  const figura = (txt, cat, px) => {
+    const c = codDe(txt); px = px || 44;
+    const fb = `<span class="sv-fig-fb" style="width:${px}px;height:${px}px">${ic[cat] || ic.R}</span>`;
+    return c ? `<img class="sv-fig" src="img/placas/${c}.png" style="width:${px}px;height:${px}px" alt="${c}" onerror="this.outerHTML=this.dataset.fb" data-fb='${fb.replace(/'/g, '&#39;')}'>` : fb;
+  };
   const catalogo = () => Object.assign({}, CATALOGO_PADRAO, Store.readJSON('Config/sv_catalogo.json', {}) || {});
   let frozen = null, editId = null, cat = 'R', lado = 'D', estado = 'Bom', fotos = [], filtroTela = '';
 
@@ -82,7 +89,11 @@
       if (ev.grupo === 'seg') return d.ini ? [LADOS[d.lado], d.tipo, d.estado].filter(Boolean).join(' · ') : 'Fim do trecho' + (d.estado ? ' · ' + d.estado : '');
       return [LADOS[d.lado], d.legenda ? '“' + d.legenda + '”' : '', d.larg && d.alt ? nf(d.larg, 2) + ' × ' + nf(d.alt, 2) + ' m' : '', d.suporte, d.estado].filter(Boolean).join(' · ');
     },
-    iconeEvento: (ev) => { const e = estadoDe(ev); return e ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${corEst(e)};margin-right:2px"></span>` : ''; },
+    iconeEvento: (ev) => {
+      const e = estadoDe(ev);
+      const dot = e ? `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${corEst(e)};margin-right:2px"></span>` : '';
+      return (ev.grupo === 'placa' ? `<span style="vertical-align:middle;display:inline-block;margin-right:4px">${figura(ev.rotulo, (ev.dados || {}).cat, 26)}</span>` : '') + dot;
+    },
     filtros, passaFiltro,
     filtroLista: (ev) => passaFiltro(ev, filtroTela),
 
@@ -194,9 +205,9 @@
     const atual = d.codigo || localStorage.getItem('sv_ult_' + cat) || lista[0] || '';
     UI.modal(title, `${cabPos(s)}
       <div class="field"><label>Categoria</label><select class="inp" id="sv-cat" onchange="SV.trocaCat(this.value)">${Object.keys(CAT).map(k => `<option value="${k}" ${k === cat ? 'selected' : ''}>${CAT[k].n}</option>`).join('')}</select></div>
-      <div class="field"><label>Placa (código e nome)</label><input class="inp" id="sv-busca" placeholder="🔎 filtrar: ex. 19, curva, lombada" oninput="SV.buscar()" style="margin-bottom:6px">
-        <select class="inp" id="sv-cod" size="5" style="height:auto">${lista.map(x => `<option ${x === atual ? 'selected' : ''}>${esc(x)}</option>`).join('')}${lista.includes(atual) || !atual ? '' : `<option selected>${esc(atual)}</option>`}<option value="__outro">Outro (digitar)…</option></select>
-        <input class="inp" id="sv-outro" style="margin-top:6px;display:none" placeholder="ex.: R-15 Altura máxima permitida"></div>
+      <div class="field"><label>Placa</label><input class="inp" id="sv-busca" placeholder="🔎 filtrar: ex. 19, curva, lombada" oninput="SV.buscar()" style="margin-bottom:8px">
+        <div class="sv-grade" id="sv-grade"></div>
+        <input class="inp" id="sv-outro" style="margin-top:6px;display:none" placeholder="ex.: placa de indicação com destinos"></div>
       <div class="field"><label>Texto / valor na placa</label><input class="inp" id="sv-leg" value="${esc(d.legenda || '')}" placeholder="ex.: 80 km/h, Ribeirão Preto 12 km"></div>
       ${chipsLado()}${chipsEstado()}
       <div class="fgrid">
@@ -210,8 +221,20 @@
       <div class="field" style="margin-top:12px"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2">${esc(ev ? ev.obs : '')}</textarea></div>
       ${blocoFoto()}
       <button class="btn-full" onclick="SV.salvarPlaca()">✓ Salvar placa</button>`);
-    $('sv-cod').onchange = () => { $('sv-outro').style.display = val('sv-cod') === '__outro' ? 'block' : 'none'; };
+    codSel = atual; grade('');
     marcar();
+  }
+  let codSel = '';
+  function grade(q) {
+    const lista = catalogo()[cat] || [];
+    const norm = (x) => x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const f = lista.filter(x => !q || norm(x).includes(norm(q)));
+    if (codSel && codSel !== '__outro' && !lista.includes(codSel) && !q) f.unshift(codSel);
+    $('sv-grade').innerHTML = f.map(x => {
+      const c = codDe(x); const nome = c ? x.slice(c.length).trim() : x;
+      return `<button class="sv-pl ${x === codSel ? 'sel' : ''}" onclick="SV.escolher(this)" data-v="${esc(x)}">${figura(x, cat, 44)}<b>${esc(c || '')}</b><span>${esc(nome)}</span></button>`;
+    }).join('') + `<button class="sv-pl ${codSel === '__outro' ? 'sel' : ''}" onclick="SV.escolher(this)" data-v="__outro"><span class="sv-fig-fb" style="width:44px;height:44px;font-size:26px;display:flex;align-items:center;justify-content:center">✏️</span><b>Outra</b><span>digitar</span></button>`;
+    $('sv-outro').style.display = codSel === '__outro' ? 'block' : 'none';
   }
   function formSeg(title, ev, elem, isFim) {
     const s = Core.S(); const d = (ev && ev.dados) || {};
@@ -245,12 +268,8 @@
   window.SV = {
     placa(c) { const s = Core.S(); if (!s) return; iniciaForm(s); cat = c; formPlaca('🪧 ' + CAT[c].n, null); },
     trocaCat(c) { cat = c; const keep = { legenda: val('sv-leg') }; const ev = editId ? Core.S().eventos.find(e => e.id === editId) : null; formPlaca($('mg-title').innerHTML, ev ? Object.assign({}, ev, { dados: Object.assign({}, ev.dados, { codigo: '' }, keep) }) : { obs: val('sv-obs'), dados: keep }); },
-    buscar() {
-      const q = val('sv-busca').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const lista = catalogo()[cat] || [];
-      const f = lista.filter(x => x.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
-      $('sv-cod').innerHTML = f.map((x, i) => `<option ${i === 0 ? 'selected' : ''}>${esc(x)}</option>`).join('') + '<option value="__outro">Outro (digitar)…</option>';
-    },
+    buscar() { grade(val('sv-busca')); },
+    escolher(el) { codSel = el.dataset.v; document.querySelectorAll('.sv-pl').forEach(b => b.classList.toggle('sel', b === el)); $('sv-outro').style.display = codSel === '__outro' ? 'block' : 'none'; if (codSel === '__outro') $('sv-outro').focus(); },
     lado(k) { lado = k; marcar(); },
     estado(i) { estado = ESTADOS[i].v; marcar(); },
     filtrar(v) { filtroTela = v; UI.renderEvents(); M.atualizar(Core.S()); },
@@ -258,14 +277,14 @@
       const s = Core.S(); if (!s) return;
       const evRef = editId ? s.eventos.find(e => e.id === editId) : Object.assign({}, frozen, { seq: (s.seq || 0) + 1 });
       evRef.fotos = fotos;
-      const tit = $('sv-cod') ? (val('sv-cod') === '__outro' ? val('sv-outro') : val('sv-cod')) : $('sv-dp') ? val('sv-dp') : $('mg-title').textContent;
+      const tit = $('sv-grade') ? (codSel === '__outro' ? val('sv-outro') : codSel) : $('sv-dp') ? val('sv-dp') : $('mg-title').textContent;
       const name = await Photo.capture(s, evRef, Photo.linhasPadrao(s, frozen, tit, [LADOS[lado] ? 'Lado ' + LADOS[lado].toLowerCase() : '', 'Estado: ' + estado, val('sv-obs').trim()]));
       if (name) { fotos.push(name); marcar(); }
     },
     salvarPlaca() {
-      let cod = val('sv-cod'); if (cod === '__outro' || !cod) cod = val('sv-outro').trim();
+      let cod = codSel; if (cod === '__outro' || !cod) cod = val('sv-outro').trim();
       if (!cod) { toast('Escolha ou digite a placa'); return; }
-      if (val('sv-cod') !== '__outro') localStorage.setItem('sv_ult_' + cat, cod);
+      if (codSel !== '__outro') localStorage.setItem('sv_ult_' + cat, cod);
       localStorage.setItem('sv_ult_sup', val('sv-sup'));
       salvar({ grupo: 'placa', cod: cat, rotulo: cod, obs: val('sv-obs').trim(),
         dados: { cat, codigo: cod, legenda: val('sv-leg').trim(), lado, estado, larg: numOrNull('sv-lg'), alt: numOrNull('sv-al'), altLivre: numOrNull('sv-hl'), afast: numOrNull('sv-af'), suporte: val('sv-sup'), pelicula: val('sv-pel') } });
