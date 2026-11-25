@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DVA Roads</string>
+    <string name="channel_name">GPS em Background</string>
+    <string name="channel_desc">Mantém o odômetro GPS ativo mesmo com a tela desligada</string>
+    <string name="notif_title">DVA Roads · sessão ativa</string>
+    <string name="notif_text">Medindo km e estacas da sessão aberta.</string>
+</resources>

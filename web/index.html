@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DVA Roads</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div id="logo-container"><div class="logo-wrap"><img src="dvabrao-logo.png" onerror="UI.fallbackLogo()" alt=""></div></div>
+  <div class="header-title">
+    <h1>DVA Roads</h1>
+    <p id="hdr-sub">Obras · Conserva · Levantamentos</p>
+  </div>
+  <button class="btn-icon" onclick="UI.openSettings()">⚙️</button>
+</div>
+
+<div class="main">
+
+  <div id="gps-banner" class="gps-banner warn" onclick="GPS.toggleDiag()">
+    <span>📡</span><span id="gps-banner-txt" style="flex:1">Aguardando GPS...</span><span style="font-size:10px;opacity:.6">🔍</span>
+  </div>
+  <div id="gps-diag-panel" style="display:none;background:#1A2342;border-radius:12px;margin:0 0 10px;padding:12px 14px;font-size:12px;color:#fff;">
+    <div style="font-weight:700;margin-bottom:8px;color:#FFD740;">🛰️ Diagnóstico GPS</div>
+    <table style="width:100%;border-collapse:collapse;line-height:1.9;">
+      <tr><td style="color:rgba(255,255,255,.6);width:40%">Fonte ativa</td><td id="gps-diag-src">—</td></tr>
+      <tr><td style="color:rgba(255,255,255,.6)">Posições recv.</td><td id="gps-diag-cnt">0</td></tr>
+      <tr><td style="color:rgba(255,255,255,.6)">Precisão</td><td id="gps-diag-acc">—</td></tr>
+      <tr><td style="color:rgba(255,255,255,.6)">Coordenada</td><td id="gps-diag-coord" style="font-size:11px;">aguardando...</td></tr>
+      <tr><td style="color:rgba(255,255,255,.6)">Tempo ativo</td><td id="gps-diag-ela">—</td></tr>
+      <tr><td style="color:rgba(255,255,255,.6)">Último erro</td><td id="gps-diag-err" style="color:#FF8A65;">—</td></tr>
+    </table>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button onclick="GPS.restart()" style="flex:1;padding:8px;border:none;border-radius:8px;background:#2196F3;color:#fff;font-size:12px;font-weight:700;">🔄 Reiniciar GPS</button>
+      <button onclick="GPS.testWebview()" style="flex:1;padding:8px;border:none;border-radius:8px;background:#4CAF50;color:#fff;font-size:12px;font-weight:700;">🌐 Testar WebView</button>
+    </div>
+  </div>
+
+  <!-- ODÔMETRO (núcleo) -->
+  <div class="odo-card">
+    <div class="odo-status-row">
+      <div class="odo-dot" id="odo-dot"></div>
+      <span class="odo-status-txt" id="odo-status">GPS inativo</span>
+      <button class="pill pill-dir" id="pill-dir" onclick="Core.toggleDir()">▲ Crescente</button>
+    </div>
+    <div id="odo-open">
+      <div class="mode-row">
+        <button class="mode-chip" id="mode-km" onclick="Core.setModo('km')">KM</button>
+        <button class="mode-chip" id="mode-est" onclick="Core.setModo('est')">Estaca</button>
+        <button class="mode-chip" id="mode-cor" onclick="Core.setModo('cor')">KM + Estaca</button>
+      </div>
+      <div class="odo-big" onclick="Core.openCorrigir()"><div id="odo-main"></div></div>
+      <div class="odo-second" id="odo-second" onclick="Core.swapPrim()"></div>
+      <div class="odo-hint">✎ toque no valor para corrigir a posição</div>
+    </div>
+    <div id="odo-closed" class="odo-closed">
+      <div class="big">Nenhuma sessão aberta</div>
+      <div class="sub">Escolha um módulo abaixo e abra uma sessão<br>para cravar o marco zero.</div>
+    </div>
+    <div class="odo-latlon" id="odo-latlon">— aguardando GPS —</div>
+    <div class="odo-sub-row">
+      <div class="odo-badge"><span id="b-dist">0,000</span><small>km percorridos</small></div>
+      <div class="odo-badge"><span id="b-spd">0</span><small id="b-spd-unit">km/h</small></div>
+      <div class="odo-badge"><span id="b-pts">0</span><small>registros</small></div>
+    </div>
+  </div>
+
+  <!-- ÁREA DINÂMICA: início (sem sessão) ou sessão ativa -->
+  <div id="area"></div>
+</div>
+
+<div class="tablet-aside">
+  <div class="card-label" style="padding:0 0 8px;">Registros da sessão</div>
+  <div class="pts-list" id="ev-list-tablet"></div>
+</div>
+
+<!-- MODAL GENÉRICO -->
+<div class="modal-overlay hidden" id="modal-gen">
+  <div class="modal">
+    <div class="modal-title"><span id="mg-title"></span><button class="modal-close" onclick="UI.closeModal()">✕</button></div>
+    <div id="mg-body"></div>
+  </div>
+</div>
+<!-- MODAL DE CONFIRMAÇÃO (acima do genérico) -->
+<div class="modal-overlay hidden" id="modal-conf" style="z-index:250">
+  <div class="modal">
+    <div class="modal-title"><span id="conf-title">Confirmar</span><button class="modal-close" onclick="UI.closeConfirm()">✕</button></div>
+    <p id="conf-desc" style="font-size:13px;color:var(--sub);margin-bottom:16px;line-height:1.5"></p>
+    <button class="btn-full red" id="conf-ok">Confirmar</button>
+    <button class="btn-full gray" style="margin-top:8px;" onclick="UI.closeConfirm()">Cancelar</button>
+  </div>
+</div>
+
+<!-- CONFIGURAÇÕES -->
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-header"><button class="btn-icon" onclick="UI.closeSettings()">←</button><h2>Configurações</h2></div>
+
+  <div class="acc-item open" id="acc-un">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-un')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">📏</span><div class="acc-hdr-info"><span class="acc-hdr-title">Unidades</span><span class="acc-hdr-sub">Km, estaca ou os dois · vale para todos os módulos</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body">
+      <div class="set-row"><label>Trabalhar em</label><select id="set-unidade" onchange="UI.saveSettings()"><option value="km">Km</option><option value="est">Estaca</option><option value="cor">Km + Estaca</option></select></div>
+      <div class="set-row"><label>Tamanho da estaca (m)</label><input id="set-est" inputmode="decimal" onchange="UI.saveSettings()"></div>
+      <div class="set-row"><label>Formato do km</label><select id="set-kmfmt" onchange="UI.saveSettings()"><option value="plus">km 120+340</option><option value="virg">km 120,340</option></select></div>
+      <div class="set-row"><label>Velocidade</label><select id="set-spd" onchange="UI.saveSettings()"><option value="kmh">km/h</option><option value="ms">m/s</option></select></div>
+      <div class="set-row"><label>Coordenadas na tela</label><select id="set-coord" onchange="UI.saveSettings()"><option value="dd">DD (decimais)</option><option value="ddm">DDM</option><option value="dms">DMS</option><option value="utm">UTM</option></select></div>
+      <p class="help">A unidade escolhida é o padrão das novas sessões. Ao abrir uma sessão dá para trocar só para ela, e a escolha fica gravada na sessão.</p>
+    </div>
+  </div>
+
+  <div class="acc-item" id="acc-gps">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-gps')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">🛰️</span><div class="acc-hdr-info"><span class="acc-hdr-title">GPS</span><span class="acc-hdr-sub">Precisão mínima aceita</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body">
+      <div class="set-row"><label>Precisão mínima</label><select id="set-acc" onchange="UI.saveSettings()"><option value="20">20 m</option><option value="30">30 m</option><option value="40">40 m (padrão)</option><option value="60">60 m</option></select></div>
+    </div>
+  </div>
+
+  <div class="acc-item" id="acc-arq">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-arq')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">💾</span><div class="acc-hdr-info"><span class="acc-hdr-title">Arquivos e backup</span><span class="acc-hdr-sub">Pasta das sessões, backup e restauração</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body">
+      <p class="help" style="margin-top:0">As sessões ficam salvas nesta pasta do celular:</p>
+      <div class="path-box" id="set-path">—</div>
+      <p class="help">Cada backup gera um .zip em <b>Downloads/DVA Roads/Backup</b> e abre o “Enviar”, onde você escolhe o Google Drive.</p>
+      <button class="btn-full navy" onclick="Core.backupAll()">💾 Backup de todas as sessões</button>
+      <button class="btn-full gray" onclick="Core.restorePick()">♻️ Restaurar sessão de um .zip</button>
+      <input type="file" id="restore-in" accept=".zip,application/zip" style="display:none" onchange="Core.restoreFile(this)">
+    </div>
+  </div>
+
+  <div class="acc-item" id="acc-lic">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-lic')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">🔑</span><div class="acc-hdr-info"><span class="acc-hdr-title">Licenças dos módulos</span><span class="acc-hdr-sub">Ativar módulos com chave</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body">
+      <div id="lic-list"></div>
+      <div class="field" style="margin-top:12px"><label>Chave de ativação</label><textarea class="inp" id="lic-key" rows="3" placeholder="DVAR1...."></textarea></div>
+      <button class="btn-full" onclick="License.activateFromInput()">🔑 Ativar chave</button>
+    </div>
+  </div>
+
+  <div class="acc-item" id="acc-sobre">
+    <div class="acc-hdr" onclick="UI.toggleAcc('acc-sobre')">
+      <div class="acc-hdr-left"><span class="acc-hdr-icon">ℹ️</span><div class="acc-hdr-info"><span class="acc-hdr-title">Sobre o aplicativo</span><span class="acc-hdr-sub">Versão e informações</span></div></div>
+      <span class="acc-arrow">›</span>
+    </div>
+    <div class="acc-body" style="padding:0 6px 12px">
+      <div class="about-card" onclick="UI.openAboutFull()">
+        <div class="about-top">
+          <div class="about-logo"><img src="dvabrao-logo.png" onerror="this.parentElement.textContent='DVA'" alt=""></div>
+          <div class="about-name"><h4>DVA ROADS</h4><p>by DVABRAO SERVIÇOS LTDA · <span id="about-ver">Versão 1.0</span></p></div>
+        </div>
+        <div class="about-body"><p>Plataforma de obras, conserva e levantamentos rodoviários. Núcleo comum de GPS, odômetro em km e estacas, sessões e exportação, com os módulos Marco Zero, SLIR e Sinalização Horizontal.</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="about-full" id="about-full">
+  <button class="about-full-close" onclick="UI.closeAboutFull()">✕</button>
+  <div class="about-full-logo"><img src="dvabrao-logo.png" onerror="this.parentElement.innerHTML='<span style=\'font-size:32px;font-weight:800;color:#003F87\'>DVA</span>'" alt=""></div>
+  <div class="about-full-name">DVA Roads</div>
+  <div class="about-full-by">by DVABRAO SERVIÇOS LTDA</div>
+  <div class="about-full-sub">Obras · Conserva · Levantamentos<br>Marco Zero · SLIR · Sinalização Horizontal</div>
+  <div class="about-full-ver" id="about-full-ver">Versão 1.0</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="cam-in" accept="image/*" capture="environment" style="display:none">
+
+<script src="jszip.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/license.js"></script>
+<script src="js/gps.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/core.js"></script>
+<script src="js/photo.js"></script>
+<script src="js/export.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/modules/marcozero.js"></script>
+<script src="js/modules/slir.js"></script>
+<script src="js/modules/sh.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Pasta temporária usada para compartilhar arquivos -->
+    <cache-path name="shared_files" path="share/" />
+    <!-- Pasta das sessões (Android/data/com.dvabrao.dvaroads/files/DVA Roads) -->
+    <external-files-path name="sessoes" path="DVA Roads/" />
+</paths>
