@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light only">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DVA Placas · DVABRAO SERVIÇOS LTDA</title>
+<link rel="stylesheet" href="css/app.css">
+<style>
+  body{background:#E9EDF3}
+  #dg-tela{max-width:980px;margin:0 auto;left:0;right:0;box-shadow:0 0 30px #0002}
+  #acesso{max-width:440px;margin:60px auto;background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 20px #0001}
+  #acesso h1{font-size:20px;margin:0 0 4px;color:#111D3D}#acesso h1 b{color:#E0B000}
+</style>
+</head>
+<body>
+<div id="acesso" style="display:none">
+  <h1>DVA <b>PLACAS</b></h1>
+  <p class="help">Diagramação de placas conforme o DER-SP. Abre DXF, WMF e SVG e gera prancha em PDF, DXF, WMF e JPG.</p>
+  <div class="field"><label>Chave de licença</label><input class="inp" id="lic-in" placeholder="DVAR1.…" autocomplete="off"></div>
+  <button class="btn-full" onclick="entrar()">Entrar</button>
+  <p class="help" id="lic-msg"></p>
+  <p class="help" style="margin-top:14px">DVABRAO SERVIÇOS LTDA · dvabrao@gmail.com</p>
+</div>
+
+<div class="modal-overlay hidden" id="modal-gen">
+  <div class="modal">
+    <div class="modal-title"><span id="mg-title"></span><button class="modal-close" onclick="UI.closeModal()">✕</button></div>
+    <div id="mg-body"></div>
+  </div>
+</div>
+<div class="modal-overlay hidden" id="modal-conf" style="z-index:250">
+  <div class="modal">
+    <div class="modal-title"><span id="conf-title">Confirmar</span><button class="modal-close" onclick="UI.closeConfirm()">✕</button></div>
+    <p id="conf-desc" style="font-size:13px;color:var(--sub);margin-bottom:16px;line-height:1.5"></p>
+    <button class="btn-full red" id="conf-ok">Confirmar</button>
+    <button class="btn-full gray" style="margin-top:8px;" onclick="UI.closeConfirm()">Cancelar</button>
+  </div>
+</div>
+<input type="file" id="cam-in" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="gal-in" accept="image/*" style="display:none">
+<div class="toast" id="toast"></div>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/license.js"></script>
+<script>
+  // versão web: mesmas funções do app, sem GPS nem sessões
+  window.DG_WEB = true;
+  window.Modules = null;
+  window.UI = {
+    modal(t, b) { $('mg-title').innerHTML = t; $('mg-body').innerHTML = b; $('modal-gen').classList.remove('hidden'); },
+    closeModal() { $('modal-gen').classList.add('hidden'); $('mg-body').innerHTML = ''; },
+    confirm(t, d, fn, ok) { $('conf-title').textContent = t; $('conf-desc').innerHTML = d; $('conf-ok').textContent = ok || 'Confirmar'; $('conf-ok').onclick = () => { UI.closeConfirm(); fn(); }; $('modal-conf').classList.remove('hidden'); },
+    closeConfirm() { $('modal-conf').classList.add('hidden'); },
+    alert(t, d) { $('conf-title').textContent = t; $('conf-desc').innerHTML = d; $('conf-ok').textContent = 'OK'; $('conf-ok').onclick = UI.closeConfirm; $('modal-conf').classList.remove('hidden'); },
+  };
+  window.IA = { url: () => ((window.settings && settings.iaUrl) || 'https://dva-roads.dvabrao.workers.dev').replace(/\/+$/, '') };
+</script>
+<script src="js/modules/dg.js"></script>
+<script>
+  async function entrar() {
+    $('lic-msg').textContent = 'Verificando…';
+    try { await License.activate($('lic-in').value.trim()); } catch (e) { $('lic-msg').textContent = '⚠️ ' + e.message; return; }
+    iniciar();
+  }
+  function iniciar() {
+    if (!License.ok('dg')) { $('acesso').style.display = 'block'; if ($('lic-msg').textContent === 'Verificando…') $('lic-msg').textContent = '⚠️ Esta chave não libera o DVA Placas.'; return; }
+    $('acesso').style.display = 'none'; DG.abrir();
+  }
+  (async () => { try { await License.load(); } catch (e) {} iniciar(); })();
+</script>
+</body>
+</html>

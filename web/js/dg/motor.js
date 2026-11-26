@@ -13,6 +13,12 @@ const DGMotor = (function () {
     amarelo: '#FFCC00', laranja: '#F47920', vermelho: '#D01C1F' };
   // ACI do AutoCAD para o DXF
   const ACI = { verde: 94, azul: 5, marrom: 34, branco: 7, preto: 250, amarelo: 2, laranja: 30, vermelho: 1 };
+  const col = (c) => CORES[c] || (String(c || '').startsWith('#') ? c : '#000000');
+  const hexRGB = (h) => { h = col(h).slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); return [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16)); };
+  const ACIT = { 1: [255, 0, 0], 2: [255, 255, 0], 3: [0, 255, 0], 4: [0, 255, 255], 5: [0, 0, 255], 6: [255, 0, 255], 7: [255, 255, 255], 8: [128, 128, 128], 9: [192, 192, 192], 30: [255, 127, 0], 34: [153, 76, 0], 94: [0, 127, 0], 250: [51, 51, 51], 252: [130, 130, 130], 40: [255, 191, 0] };
+  const aciDe = (rgb) => { let best = 7, bd = 1e9; Object.entries(ACIT).forEach(([k, v]) => { const dd = (v[0] - rgb[0]) ** 2 + (v[1] - rgb[1]) ** 2 + (v[2] - rgb[2]) ** 2; if (dd < bd) { bd = dd; best = +k; } }); return best; };
+  const NOMES_COR = { verde: 'Verde', azul: 'Azul', marrom: 'Marrom', branco: 'Branco', preto: 'Preto', amarelo: 'Amarelo', laranja: 'Laranja', vermelho: 'Vermelho' };
+  const nomeCor = (c) => NOMES_COR[c] || String(c).toUpperCase();
   const ESQUEMAS = {
     verde: { n: 'Orientação · verde (localidades)', fundo: 'verde', tinta: 'branco' },
     azul: { n: 'Orientação · azul (rodovias) / apoio', fundo: 'azul', tinta: 'branco' },
@@ -195,25 +201,28 @@ const DGMotor = (function () {
     cam.fundo.push(rrect(0, 0, L, H, cl.cantos));
     cam.orla.push(rrect(cl.afast, cl.afast, L - 2 * cl.afast, H - 2 * cl.afast, 50), rrect(C, C, L - 2 * C, H - 2 * C, Math.max(5, 50 - cl.orla)));
     let y = C + 0.75 * R[0].h + extraV;
+    const info = { orla: cl.orla, afast: cl.afast, cantos: cl.cantos, raioOrla: 50, rows: [], tarjas: [], tinta: es.tinta, fundo: es.fundo };
     R.forEach((r, i) => {
       const xl = C + 0.75 * r.h, xr = L - C - 0.75 * r.h;
       const temD = r.st && /D/.test(r.l.seta) && r.l.seta !== 'F', temE = r.st && !temD;
       const cy = y + r.rh / 2; const yTxt = cy - r.h / 2;
       let x;
       if (r.dist) x = xl; else if (temD) x = xr - r.w; else if (temE) x = xl; else x = (L - r.w) / 2;
-      if (temE) { cam.tinta.push(...mover(r.st.paths, x, cy - r.st.h / 2)); x += r.st.w + r.h; }
-      if (r.esc) { cam.escF.push(...mover(r.esc.fundo, x, cy - r.esc.h / 2)); cam.escB.push(...mover(r.esc.borda, x, cy - r.esc.h / 2), ...mover(r.esc.tx, x, cy - r.esc.h / 2)); x += r.esc.w + r.h; }
-      if (r.tw) { cam.tinta.push(...contornosTexto(r.l.texto, r.sTx, r.h, x, yTxt)); x += r.tw + r.h; }
-      if (r.dist) cam.tinta.push(...contornosTexto(r.dist, 'EM', r.h, temD ? xr - r.st.w - r.h - r.dw : xr - r.dw, yTxt));
-      if (temD) cam.tinta.push(...mover(r.st.paths, xr - r.st.w, cy - r.st.h / 2));
+      const el = []; const rowTop = y;
+      if (temE) { cam.tinta.push(...mover(r.st.paths, x, cy - r.st.h / 2)); el.push({ tipo: 'Seta', x, w: r.st.w, y: cy - r.st.h / 2, h: r.st.h }); x += r.st.w + r.h; }
+      if (r.esc) { cam.escF.push(...mover(r.esc.fundo, x, cy - r.esc.h / 2)); cam.escB.push(...mover(r.esc.borda, x, cy - r.esc.h / 2), ...mover(r.esc.tx, x, cy - r.esc.h / 2)); el.push({ tipo: 'Escudo', x, w: r.esc.w, y: cy - r.esc.h / 2, h: r.esc.h }); x += r.esc.w + r.h; }
+      if (r.tw) { cam.tinta.push(...contornosTexto(r.l.texto, r.sTx, r.h, x, yTxt)); el.push({ tipo: 'Texto', x, w: r.tw, y: yTxt, h: r.h, txt: r.l.texto, serie: r.sTx, hl: r.h }); x += r.tw + r.h; }
+      if (r.dist) { const xd = temD ? xr - r.st.w - r.h - r.dw : xr - r.dw; cam.tinta.push(...contornosTexto(r.dist, 'EM', r.h, xd, yTxt)); el.push({ tipo: 'Texto', x: xd, w: r.dw, y: yTxt, h: r.h, txt: r.dist, serie: 'EM', hl: r.h }); }
+      if (temD) { cam.tinta.push(...mover(r.st.paths, xr - r.st.w, cy - r.st.h / 2)); el.push({ tipo: 'Seta', x: xr - r.st.w, w: r.st.w, y: cy - r.st.h / 2, h: r.st.h }); }
+      el.sort((a, b) => a.x - b.x); info.rows.push({ y: rowTop, h: r.rh, el });
       y += r.rh;
       if (i < R.length - 1) {
-        if (r.l.tarja) { y += 0.75 * r.h + extraV / 2; cam.orla.push(rrect(C, y, L - 2 * C, cl.orla, 0)); y += cl.orla + 0.75 * R[i + 1].h + extraV / 2; }
+        if (r.l.tarja) { y += 0.75 * r.h + extraV / 2; cam.orla.push(rrect(C, y, L - 2 * C, cl.orla, 0)); info.tarjas.push({ y, h: cl.orla }); y += cl.orla + 0.75 * R[i + 1].h + extraV / 2; }
         else y += 0.75 * Math.max(r.h, R[i + 1].h) + extraV;
       }
     });
     return {
-      L, H, calc, avisos,
+      L, H, calc, avisos, info,
       camadas: [
         { nome: 'FUNDO', cor: es.fundo, paths: cam.fundo },
         { nome: 'ORLA_TARJA', cor: es.tinta, paths: cam.orla },
@@ -257,6 +266,12 @@ const DGMotor = (function () {
 
   // ── placa composta retangular: sinal R/A + setas + textos (ex.: lombada com seta ↘) ──
   function pictoEm(cod, h) {
+    const sau = (window.DG_SAU || {})[cod];
+    if (sau) {
+      // pictograma de serviço: quadro branco h × h com o símbolo a 80% (padrão DER)
+      const m = 0.1 * h, k = 0.8 * h / Math.max(sau.w, sau.h), ox = m + (0.8 * h - sau.w * k) / 2, oy = m + (0.8 * h - sau.h * k) / 2;
+      return { w: h, h, camadas: [{ cor: 'branco', paths: [rrect(0, 0, h, h, 0)] }].concat(sau.c.map(c => ({ cor: c.cor, paths: xf(c.paths, ([x, y]) => [ox + x * k, oy + y * k]) }))) };
+    }
     const pic = (window.DG_PICTOS || {})[cod]; if (!pic) return null;
     const S = h / pic.h;
     return { w: pic.w * S, h: pic.h * S, camadas: pic.c.map(c => ({ cor: c.cor, paths: xf(c.paths, ([x, y]) => [x * S, y * S]) })) };
@@ -268,6 +283,7 @@ const DGMotor = (function () {
       const h = +it.h || 200;
       if (it.k === 'picto') { const pc = pictoEm(it.codigo, h); if (!pc) { avisos.push('Sinal ' + (it.codigo || '?') + ' sem desenho.'); return null; } return { it, w: pc.w, h: pc.h, u: 0.2 * h, pc }; }
       if (it.k === 'seta') { const st = seta(it.dir || 'BD', h); return { it, w: st.w, h: st.h, u: h, st }; }
+      if (it.k === 'img') { if (!it.src) return null; return { it, w: h * (it.ar || 1), h, u: 0.2 * h, img: true }; }
       const tx = (it.texto || '').trim(); if (!tx) return null;
       const sr = serieDe(tx, it.serie); return { it, w: larguraTexto(tx, sr, h), h, u: h, sr, tx };
     }).filter(Boolean);
@@ -282,7 +298,7 @@ const DGMotor = (function () {
     if (+P.H) { if (+P.H < calc.H) avisos.push('Altura informada menor que a necessária (' + calc.H + ' mm).'); H = +P.H; }
     const cams = [{ nome: 'FUNDO', cor: es.fundo, paths: [rrect(0, 0, L, H, 50)] },
       { nome: 'ORLA', cor: es.tinta, paths: [rrect(cl.afast, cl.afast, L - 2 * cl.afast, H - 2 * cl.afast, 50 - cl.afast), rrect(C, C, L - 2 * C, H - 2 * C, Math.max(5, 50 - C))] }];
-    const tinta = [];
+    const tinta = [], imagens = [], el = [];
     // conteúdo centralizado na área interna; alinhamento de cada item na direção transversal
     const ix0 = C + mg, iy0 = C + mg, iw = L - 2 * (C + mg), ih = H - 2 * (C + mg);
     let x = ix0 + (linha ? (iw - Wi) / 2 : 0), y = iy0 + (linha ? 0 : (ih - Hi) / 2);
@@ -290,24 +306,34 @@ const DGMotor = (function () {
       const al = i.it.alinh || 'centro';
       const px = linha ? x : ix0 + (al === 'inicio' ? 0 : al === 'fim' ? iw - i.w : (iw - i.w) / 2);
       const py = linha ? iy0 + (al === 'inicio' ? 0 : al === 'fim' ? ih - i.h : (ih - i.h) / 2) : y;
-      if (i.pc) i.pc.camadas.forEach(c => cams.push({ nome: 'SINAL_' + c.cor.toUpperCase(), cor: c.cor, paths: mover(c.paths, px, py) }));
-      else if (i.st) tinta.push(...mover(i.st.paths, px, py));
-      else tinta.push(...contornosTexto(i.tx, i.sr, i.h, px, py));
+      if (i.pc) { i.pc.camadas.forEach(c => cams.push({ nome: 'SINAL_' + c.cor.toUpperCase(), cor: c.cor, paths: mover(c.paths, px, py) })); el.push({ tipo: 'Sinal ' + i.it.codigo, x: px, y: py, w: i.w, h: i.h }); }
+      else if (i.st) { tinta.push(...mover(i.st.paths, px, py)); el.push({ tipo: 'Seta', x: px, y: py, w: i.w, h: i.h }); }
+      else if (i.img) { imagens.push({ x: px, y: py, w: i.w, h: i.h, src: i.it.src, iw: i.it.iw, ih: i.it.ih, nome: i.it.nome || 'Imagem' }); el.push({ tipo: 'Imagem', x: px, y: py, w: i.w, h: i.h }); }
+      else { tinta.push(...contornosTexto(i.tx, i.sr, i.h, px, py)); el.push({ tipo: 'Texto', x: px, y: py, w: i.w, h: i.h, txt: i.tx, serie: i.sr, hl: i.h }); }
       if (linha) x += i.w + gap; else y += i.h + gap;
     });
     if (tinta.length) cams.push({ nome: 'TEXTO_SETAS', cor: es.tinta, paths: tinta });
-    return { L, H, calc, avisos, camadas: cams };
+    // prancha: em linha = uma faixa com todos; em coluna = uma faixa por elemento
+    const rows = linha ? [{ y: Math.min(...el.map(e => e.y)), h: Math.max(...el.map(e => e.y + e.h)) - Math.min(...el.map(e => e.y)), el }] : el.map(e => ({ y: e.y, h: e.h, el: [e] }));
+    return { L, H, calc, avisos, camadas: cams, imagens, info: { orla: cl.orla, afast: cl.afast, cantos: 50, raioOrla: 50, rows, tarjas: [], tinta: es.tinta, fundo: es.fundo } };
   }
 
-  function desenhar(P) { return P.tipo === 'placa' ? placaCatalogo(P) : P.tipo === 'composta' ? placaComposta(P) : placaTexto(P); }
+  // ── desenho importado (DXF, WMF, SVG): escala e troca de cores ──
+  function placaImportada(P) {
+    const k = +P.L && P.L0 ? +P.L / P.L0 : 1; const W = P.L0 * k, H = P.H0 * k;
+    return { L: W, H, calc: { L: Math.round(W), H: Math.round(H) }, avisos: [],
+      camadas: (P.camadas || []).map(c => ({ nome: c.nome || 'IMPORTADO', cor: (P.cores && P.cores[c.cor]) || c.cor, paths: xf(c.paths, ([x, y]) => [x * k, y * k]) })) };
+  }
+  function desenhar(P) { return P.tipo === 'placa' ? placaCatalogo(P) : P.tipo === 'composta' ? placaComposta(P) : P.tipo === 'importado' ? placaImportada(P) : placaTexto(P); }
 
   // ── exportação ────────────────────────────────────────────────
   const dPath = (paths, k, f) => paths.map(p => 'M' + p.map(([x, y]) => (x * k).toFixed(f) + ' ' + (y * k).toFixed(f)).join('L') + 'Z').join('');
   function svg(d, opt) {
-    opt = opt || {}; const k = 1;
-    const corpo = d.camadas.map(c => `<path fill="${CORES[c.cor] || c.cor}" fill-rule="evenodd" d="${dPath(c.paths, k, 1)}"/>`).join('');
+    opt = opt || {};
+    const corpo = d.camadas.map(c => `<path fill="${col(c.cor)}" fill-rule="evenodd" d="${dPath(c.paths, 1, 1)}"/>`).join('')
+      + (d.imagens || []).map(im => `<image href="${im.src}" x="${im.x}" y="${im.y}" width="${im.w}" height="${im.h}" preserveAspectRatio="none"/>`).join('');
     const pad = opt.margem || 0;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${d.L + 2 * pad} ${d.H + 2 * pad}"${opt.w ? ` width="${opt.w}" height="${opt.w * (d.H + 2 * pad) / (d.L + 2 * pad)}"` : ''}>${corpo}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="${-pad} ${-pad} ${d.L + 2 * pad} ${d.H + 2 * pad}"${opt.w ? ` width="${opt.w}" height="${opt.w * (d.H + 2 * pad) / (d.L + 2 * pad)}"` : ''}>${corpo}</svg>`;
   }
   function jpg(d, maxPx) {
     return new Promise((ok, ko) => {
@@ -318,88 +344,200 @@ const DGMotor = (function () {
       im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg(d, { w }));
     });
   }
-  /** PDF vetorial de uma página no tamanho da placa (escala 1:1 até 5 m; acima disso, reduz) */
+
+  // ── escritor de PDF (vetorial, Helvetica, imagens JPEG) ──
+  function PDF() {
+    const pages = [], imgs = []; let cur = null;
+    const enc = (t) => String(t).replace(/[^\x20-\xff]/g, '?').replace(/[\\()]/g, '\\$&');
+    return {
+      page(wmm, hmm) { cur = { w: wmm * 72 / 25.4, h: hmm * 72 / 25.4, hmm, ops: [] }; pages.push(cur); return this; },
+      k: 72 / 25.4,
+      X(x) { return (x * this.k).toFixed(2); }, Y(y) { return ((cur.hmm - y) * this.k).toFixed(2); },
+      fill(c) { const [r, g, b] = hexRGB(c); cur.ops.push((r / 255).toFixed(3) + ' ' + (g / 255).toFixed(3) + ' ' + (b / 255).toFixed(3) + ' rg'); return this; },
+      stroke(c, w) { const [r, g, b] = hexRGB(c); cur.ops.push((r / 255).toFixed(3) + ' ' + (g / 255).toFixed(3) + ' ' + (b / 255).toFixed(3) + ' RG ' + ((w || 0.2) * this.k).toFixed(2) + ' w'); return this; },
+      paths(paths, ox, oy, sc, modo) { paths.forEach(p => { p.forEach(([x, y], i) => cur.ops.push(this.X(ox + x * sc) + ' ' + this.Y(oy + y * sc) + (i ? ' l' : ' m'))); cur.ops.push('h'); }); cur.ops.push(modo || 'f*'); return this; },
+      rect(x, y, w, h, modo) { cur.ops.push(this.X(x) + ' ' + this.Y(y + h) + ' ' + (w * this.k).toFixed(2) + ' ' + (h * this.k).toFixed(2) + ' re ' + (modo || 'S')); return this; },
+      line(x1, y1, x2, y2) { cur.ops.push(this.X(x1) + ' ' + this.Y(y1) + ' m ' + this.X(x2) + ' ' + this.Y(y2) + ' l S'); return this; },
+      text(x, y, t, sz, opt) {
+        opt = opt || {}; sz = sz || 3; const pt = sz * this.k; let xx = x;
+        const wtxt = String(t).length * pt * 0.5 / this.k;           // largura aproximada (Helvetica)
+        if (opt.al === 'c') xx = x - wtxt / 2; else if (opt.al === 'd') xx = x - wtxt;
+        cur.ops.push(`BT /${opt.b ? 'F2' : 'F1'} ${pt.toFixed(2)} Tf ${this.X(xx)} ${this.Y(y)} Td (${enc(t)}) Tj ET`); return this;
+      },
+      image(src, iw, ih, x, y, w, h) {
+        const b64 = String(src).split(',')[1] || ''; const n = imgs.length; imgs.push({ b64, iw, ih });
+        cur.ops.push(`q ${(w * this.k).toFixed(2)} 0 0 ${(h * this.k).toFixed(2)} ${this.X(x)} ${this.Y(y + h)} cm /Im${n} Do Q`); return this;
+      },
+      raw(op) { cur.ops.push(op); return this; },
+      b64() {
+        const objs = []; const add = (o) => { objs.push(o); return objs.length; };
+        const cat = add(null), pagesN = add(null), f1 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'), f2 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
+        const imN = imgs.map(im => add({ img: im }));
+        const xo = imN.length ? '/XObject << ' + imN.map((n, i) => `/Im${i} ${n} 0 R`).join(' ') + ' >>' : '';
+        const kids = pages.map(pg => { const cs = pg.ops.join('\n'); const c = add(`<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`); return add(`<< /Type /Page /Parent ${pagesN} 0 R /MediaBox [0 0 ${pg.w.toFixed(2)} ${pg.h.toFixed(2)}] /Contents ${c} 0 R /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> ${xo} >> >>`); });
+        objs[cat - 1] = `<< /Type /Catalog /Pages ${pagesN} 0 R >>`; objs[pagesN - 1] = `<< /Type /Pages /Kids [${kids.map(k => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
+        const info = add('<< /Producer (DVA Placas - DVABRAO SERVICOS LTDA) >>');
+        let out = '%PDF-1.4\n%\xe2\xe3\xcf\xd3\n'; const offs = [];
+        objs.forEach((o, i) => {
+          offs.push(out.length);
+          if (o && o.img) { const bin = atob(o.img.b64); out += `${i + 1} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${o.img.iw} /Height ${o.img.ih} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${bin.length} >>\nstream\n${bin}\nendstream\nendobj\n`; }
+          else out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+        });
+        const xref = out.length;
+        out += 'xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+        out += `trailer\n<< /Size ${objs.length + 1} /Root ${cat} 0 R /Info ${info} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+        return btoa(out);
+      },
+    };
+  }
+  /** desenha a placa dentro de uma caixa (mm) da página */
+  function placaNaPagina(doc, d, x, y, w, h) {
+    const sc = Math.min(w / d.L, h / d.H); const ox = x + (w - d.L * sc) / 2, oy = y + (h - d.H * sc) / 2;
+    d.camadas.forEach(c => { doc.fill(col(c.cor)); doc.paths(c.paths, ox, oy, sc, 'f*'); });
+    (d.imagens || []).forEach(im => { if (im.iw) doc.image(im.src, im.iw, im.ih, ox + im.x * sc, oy + im.y * sc, im.w * sc, im.h * sc); });
+    return { ox, oy, sc };
+  }
+  /** PDF em escala 1:1 (até 5 m), para impressão em plotter */
   function pdf(d, titulo) {
-    const mm = 72 / 25.4; let k = mm; const maxPt = 14400;
-    if (Math.max(d.L, d.H) * k > maxPt) k = maxPt / Math.max(d.L, d.H);
-    const W = d.L * k, H = d.H * k;
-    let cs = '';
-    d.camadas.forEach(c => {
-      const hex = (CORES[c.cor] || '#000000').slice(1); const rgb = [0, 2, 4].map(i => (parseInt(hex.substr(i, 2), 16) / 255).toFixed(3)).join(' ');
-      cs += rgb + ' rg\n';
-      c.paths.forEach(p => { p.forEach(([x, y], i) => { cs += (x * k).toFixed(2) + ' ' + (H - y * k).toFixed(2) + (i ? ' l\n' : ' m\n'); }); cs += 'h\n'; });
-      cs += 'f*\n';
+    const doc = PDF(); let W = d.L, H = d.H; const lim = 5080; const f = Math.max(W, H) > lim ? lim / Math.max(W, H) : 1;
+    doc.page(W * f, H * f); placaNaPagina(doc, d, 0, 0, W * f, H * f); return doc.b64();
+  }
+
+  // ── prancha de projeto (padrão Placa Pro): placa, status, cotas, cores, contornos e tabela de letras ──
+  const LETRAS = 'abcdefghijklmnopqrstuvwxyz';
+  function prancha(d, P, meta) {
+    meta = meta || {}; const doc = PDF(); doc.page(210, 297);
+    const azul = '#111D3D', cinza = '#555555';
+    const cab = (pg) => { doc.fill(azul).text(10, 10, 'DVABRAO SERVIÇOS LTDA · DVA Placas', 3, { b: 1 }).fill(cinza).text(200, 10, (meta.nome || '') + (pg ? ' · folha ' + pg : ''), 2.6, { al: 'd' }); doc.stroke('#BBBBBB', 0.2).line(10, 12, 200, 12); };
+    cab(1);
+    // placa colorida
+    const pp = placaNaPagina(doc, d, 10, 18, 90, 95); const yb = Math.max(pp.oy + d.H * pp.sc, 50);
+    doc.fill('#000000').text(10, yb + 8, 'Status: ' + (P.status || 'Implementar'), 3.4, { b: 1 }).text(10, yb + 14, 'Dimensões: ' + nf2(d.L / 1000) + ' x ' + nf2(d.H / 1000) + ' m', 3.4, { b: 1 });
+    if (meta.local) doc.fill(cinza).text(10, yb + 19, meta.local, 2.6);
+    let y0 = yb + 24;
+    const info = d.info;
+    if (info && info.rows && info.rows.length) {
+      // cotas
+      const box = { x: 118, y: 22, w: 78, h: Math.max(30, Math.min(88, yb - 26)) }; const sc = Math.min(box.w / d.L, box.h / d.H); const ox = box.x + (box.w - d.L * sc) / 2, oy = box.y + (box.h - d.H * sc) / 2;
+      const X = (v) => ox + v * sc, Y = (v) => oy + v * sc;
+      doc.stroke('#000000', 0.25).rect(X(0), Y(0), d.L * sc, d.H * sc);
+      const C = info.orla + info.afast; doc.stroke('#000000', 0.15).rect(X(info.afast), Y(info.afast), (d.L - 2 * info.afast) * sc, (d.H - 2 * info.afast) * sc).rect(X(C), Y(C), (d.L - 2 * C) * sc, (d.H - 2 * C) * sc);
+      info.tarjas.forEach(t => doc.rect(X(C), Y(t.y), (d.L - 2 * C) * sc, t.h * sc));
+      info.rows.forEach(r => r.el.forEach(e => doc.stroke('#1565C0', 0.15).rect(X(e.x), Y(e.y), e.w * sc, e.h * sc)));
+      const mapa = {}; const tabela = [];
+      const letra = (v) => { v = Math.round(v); if (v <= 0) return null; if (!mapa[v]) { mapa[v] = LETRAS[tabela.length % 26] + (tabela.length >= 26 ? Math.floor(tabela.length / 26) : ''); tabela.push([mapa[v], v]); } return mapa[v]; };
+      const cadeiaH = (cortes, yy, acima) => { cortes = [...new Set(cortes.map(v => Math.round(v)))].sort((a, b) => a - b); doc.stroke('#C62828', 0.12);
+        for (let i = 0; i < cortes.length - 1; i++) { const a = cortes[i], b = cortes[i + 1]; const l = letra(b - a); if (!l) continue; doc.line(X(a), yy, X(b), yy).line(X(a), yy - 0.8, X(a), yy + 0.8).line(X(b), yy - 0.8, X(b), yy + 0.8); doc.fill('#C62828').text((X(a) + X(b)) / 2, yy + (acima ? -0.8 : 2.4), l, 2.2, { al: 'c' }); } };
+      const cadeiaV = (cortes, xx) => { cortes = [...new Set(cortes.map(v => Math.round(v)))].sort((a, b) => a - b); doc.stroke('#C62828', 0.12);
+        for (let i = 0; i < cortes.length - 1; i++) { const a = cortes[i], b = cortes[i + 1]; const l = letra(b - a); if (!l) continue; doc.line(xx, Y(a), xx, Y(b)).line(xx - 0.8, Y(a), xx + 0.8, Y(a)).line(xx - 0.8, Y(b), xx + 0.8, Y(b)); doc.fill('#C62828').text(xx - 1.2, (Y(a) + Y(b)) / 2 + 0.8, l, 2.2, { al: 'd' }); } };
+      info.rows.forEach((r, i) => {
+        const c = [0, d.L]; r.el.forEach(e => c.push(e.x, e.x + e.w));
+        const yy = i === 0 ? Y(0) - 2 : i === info.rows.length - 1 ? Y(d.H) + 2 : Y(r.y) - 0.6;
+        cadeiaH(c, yy, i === 0 || (i > 0 && i < info.rows.length - 1));
+      });
+      const cv = [0, d.H]; info.rows.forEach(r => cv.push(r.y, r.y + r.h)); info.tarjas.forEach(t => cv.push(t.y, t.y + t.h));
+      cadeiaV(cv, X(0) - 2);
+      // tabela de cotas
+      const yt = box.y + box.h + 10;
+      doc.fill('#000000').text(118, yt, 'Cotas (mm)', 3, { b: 1 });
+      tabela.forEach(([l, v], i) => doc.text(118 + (i % 4) * 20, yt + 5 + Math.floor(i / 4) * 4.2, l + ' = ' + v, 2.7));
+      y0 = Math.max(y0, yt + 8 + Math.ceil(tabela.length / 4) * 4.2);
+    }
+    // cores das partes
+    doc.fill(azul).text(10, y0 + 4, 'Cores', 3.2, { b: 1 }); let yc = y0 + 9;
+    const NOME_CAM = (n) => /^FUNDO/.test(n) ? 'Fundo' : /ORLA/.test(n) ? 'Orla e tarjas' : /ESCUDO_TEXTO/.test(n) ? 'Texto do escudo' : /ESCUDO/.test(n) ? 'Escudo' : /TEXTO|SETA/.test(n) ? 'Legenda e setas' : /^COMPL_/.test(n) ? 'Complementar · ' + NOME_CAM(n.slice(6)) : /^SINAL/.test(n) ? 'Sinal' : 'Elemento';
+    const vistos = {};
+    d.camadas.forEach(c => { const k = NOME_CAM(c.nome) + '|' + c.cor; if (vistos[k]) return; vistos[k] = 1;
+      doc.fill(col(c.cor)).rect(10, yc - 2.6, 5, 3, 'f'); doc.stroke('#000000', 0.1).rect(10, yc - 2.6, 5, 3); doc.fill('#000000').text(17, yc, NOME_CAM(c.nome) + ': ' + nomeCor(c.cor), 2.8); yc += 4.4; });
+    (d.imagens || []).forEach(im => { doc.fill('#000000').text(17, yc, 'Imagem: ' + im.nome + ' (' + Math.round(im.w) + ' × ' + Math.round(im.h) + ' mm)', 2.8); yc += 4.4; });
+    // contornos (canto da placa)
+    if (info) {
+      const cx = 118, cy = y0 + 4; doc.fill(azul).text(cx, cy, 'Contornos', 3.2, { b: 1 });
+      const s2 = 0.32, bx = cx + 6, by = cy + 5, a = info.afast, o = info.orla, rr = info.raioOrla || 50;
+      doc.stroke('#000000', 0.2).line(bx, by, bx + 70 * s2 + 40, by).line(bx, by, bx, by + 70 * s2 + 20);
+      doc.stroke('#000000', 0.25);
+      const arc = (r0, off) => { const pts = []; for (let i = 0; i <= 10; i++) { const t = Math.PI + (Math.PI / 2) * i / 10; pts.push([bx + (off + r0) * s2 + r0 * s2 * Math.cos(t), by + (off + r0) * s2 + r0 * s2 * Math.sin(t)]); } return pts; };
+      [[rr, a], [Math.max(5, rr - o), a + o]].forEach(([r0, off]) => { const pts = arc(r0, off); for (let i = 1; i < pts.length; i++) doc.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]); doc.line(pts[pts.length - 1][0], pts[pts.length - 1][1], bx + 70 * s2 + 40, pts[pts.length - 1][1]); doc.line(pts[0][0], pts[0][1], pts[0][0], by + 70 * s2 + 20); });
+      doc.fill('#000000').text(bx + 70 * s2 + 42, by + a * s2 + 1, 'afastamento ' + a, 2.4).text(bx + 70 * s2 + 42, by + (a + o) * s2 + 3, 'orla ' + o, 2.4).text(bx + 2, by + 70 * s2 + 24, 'raio da orla ' + rr + ' mm · cantos da placa ' + (info.cantos ? 'R ' + info.cantos : 'vivos'), 2.4);
+      yc = Math.max(yc, by + 70 * s2 + 28);
+    }
+    // tabela de letras de cada texto
+    let yy = yc + 6; let folha = 1;
+    const textos = info ? [].concat(...info.rows.map(r => r.el.filter(e => e.tipo === 'Texto'))) : [];
+    textos.forEach((e, ix) => {
+      if (yy > 262) { doc.page(210, 297); folha++; cab(folha); yy = 20; }
+      const cor = nomeCor(info.tinta);
+      doc.fill(azul).text(10, yy, `Texto ${ix + 1}: "${e.txt}"`, 3, { b: 1 });
+      doc.fill('#000000').text(10, yy + 4.5, `Fonte: Série ${e.serie === 'EM' ? 'E(M)' : 'D'}   Altura: ${Math.round(e.hl)} mm   Cor: ${cor}   Largura: ${Math.round(e.w)} mm`, 2.8);
+      // caixas
+      const itens = []; let prev = null;
+      for (const ch of String(e.txt)) {
+        if (ch === ' ') { itens.push({ c: '', w: e.hl, esp: 0 }); prev = null; continue; }
+        const m = medidas(ch, e.serie) || [0, 70, 0]; const f = e.hl / 100;
+        itens.push({ c: ch, w: m[1] * f, esp: prev ? Math.round((prev[2] + m[0]) * f) : null }); prev = m;
+      }
+      const soma = itens.reduce((a2, i) => a2 + i.w, 0); const gap = 1.2; const k = Math.min(0.12, (190 - gap * itens.length) / Math.max(1, soma));
+      let x = 10; const yb = yy + 9, hb = 8;
+      itens.forEach((it, j) => {
+        const w = it.w * k;
+        if (j && itens[j].esp != null) { doc.fill('#C62828').text(x - 0.6, yb + hb + 3.6, String(itens[j].esp), 2, { al: 'c' }); }
+        doc.stroke('#000000', 0.15).rect(x, yb, w, hb); doc.fill('#000000').text(x + w / 2, yb + hb - 2.2, it.c || '·', 4, { al: 'c', b: 1 }).fill('#1565C0').text(x + w / 2, yb - 1, String(Math.round(it.w)), 2, { al: 'c' });
+        x += w + gap;
+      });
+      yy = yb + hb + 9;
     });
-    const objs = [];
-    objs.push('<< /Type /Catalog /Pages 2 0 R >>');
-    objs.push('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W.toFixed(2)} ${H.toFixed(2)}] /Contents 4 0 R /Resources << >> >>`);
-    objs.push(`<< /Length ${cs.length} >>\nstream\n${cs}endstream`);
-    objs.push(`<< /Title (${String(titulo || 'Placa').replace(/[()\\]/g, '').replace(/[^\x20-\x7e]/g, '')}) /Producer (DVA Roads - DVABRAO SERVICOS LTDA) >>`);
-    let out = '%PDF-1.4\n'; const offs = [];
-    objs.forEach((o, i) => { offs.push(out.length); out += (i + 1) + ' 0 obj\n' + o + '\nendobj\n'; });
-    const xref = out.length;
-    out += 'xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
-    out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info ${objs.length} 0 R >>\nstartxref\n${xref}\n%%EOF`;
-    return btoa(out);
+    doc.fill(cinza).text(10, 290, 'Diagramação conforme DER-SP, Manual de Sinalização Rodoviária, Vol. II. Larguras das letras em mm (azul) e espaços entre letras (vermelho).', 2.3);
+    return doc.b64();
   }
-  /** DXF R12 (AC1009), mm, uma camada por elemento, contornos como polilinhas fechadas */
+  const nf2 = (v) => (Math.round(v * 100) / 100).toFixed(2).replace('.', ',');
+
+  /** DXF AutoCAD 2004 (AC1018), mm: hachuras preenchidas com cor real (como os arquivos do Placa Pro) + contornos na camada CONTORNO */
   function dxf(d) {
-    const L = []; const g = (c, v) => L.push(String(c), String(v));
-    g(0, 'SECTION'); g(2, 'HEADER'); g(9, '$ACADVER'); g(1, 'AC1009'); g(9, '$INSUNITS'); g(70, 4);
-    g(9, '$EXTMIN'); g(10, 0); g(20, 0); g(9, '$EXTMAX'); g(10, d.L.toFixed(1)); g(20, d.H.toFixed(1)); g(0, 'ENDSEC');
-    const lay = []; d.camadas.forEach(c => { if (!lay.some(l => l.nome === c.nome)) lay.push(c); });
-    g(0, 'SECTION'); g(2, 'TABLES'); g(0, 'TABLE'); g(2, 'LAYER'); g(70, lay.length);
-    lay.forEach(c => { g(0, 'LAYER'); g(2, c.nome); g(70, 0); g(62, ACI[c.cor] || 7); g(6, 'CONTINUOUS'); });
-    g(0, 'ENDTAB'); g(0, 'ENDSEC');
-    g(0, 'SECTION'); g(2, 'ENTITIES');
-    d.camadas.forEach(c => c.paths.forEach(p => {
-      g(0, 'POLYLINE'); g(8, c.nome); g(66, 1); g(70, 1); g(10, 0); g(20, 0); g(30, 0);
-      p.forEach(([x, y]) => { g(0, 'VERTEX'); g(8, c.nome); g(10, x.toFixed(2)); g(20, (d.H - y).toFixed(2)); g(30, 0); });
-      g(0, 'SEQEND'); g(8, c.nome);
-    }));
-    g(0, 'ENDSEC'); g(0, 'EOF');
-    return L.join('\r\n') + '\r\n';
+    let h = 0x1000; const H = () => (h++).toString(16).toUpperCase();
+    const L = []; const g = (c, v) => { L.push(String(c).padStart(3, ' ')); L.push(String(v)); };
+    const camada = (nome) => { const n = String(nome || '').toUpperCase().replace(/^COMPL_/, ''); if (/^FUNDO/.test(n)) return 'FUNDO'; if (/ORLA|TARJA/.test(n)) return 'ORLA_TARJA'; if (/ESCUDO/.test(n)) return 'ESCUDO'; if (/TEXTO|SETA/.test(n)) return 'TEXTO_SETAS'; if (/IMAGEM/.test(n)) return 'IMAGEM'; if (/IMPORT/.test(n)) return 'IMPORTADO'; return 'SINAL'; };
+    const pt = (x, y) => { g(10, x.toFixed(2)); g(20, (d.H - y).toFixed(2)); };
+    d.camadas.forEach(c => {
+      if (!c.paths.length) return;
+      const rgb = hexRGB(c.cor), tc = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2], lay = camada(c.nome);
+      g(0, 'HATCH'); g(5, H()); g(330, '17'); g(100, 'AcDbEntity'); g(8, lay); g(62, aciDe(rgb)); g(420, tc); g(100, 'AcDbHatch');
+      g(10, '0.0'); g(20, '0.0'); g(30, '0.0'); g(210, '0.0'); g(220, '0.0'); g(230, '1.0'); g(2, 'SOLID'); g(70, 1); g(71, 0); g(91, c.paths.length);
+      c.paths.forEach(p => { g(92, 3); g(72, 0); g(73, 1); g(93, p.length); p.forEach(([x, y]) => pt(x, y)); g(97, 0); });
+      g(75, 0); g(76, 1); g(98, 0);
+      c.paths.forEach(p => { g(0, 'LWPOLYLINE'); g(5, H()); g(330, '17'); g(100, 'AcDbEntity'); g(8, 'CONTORNO'); g(100, 'AcDbPolyline'); g(90, p.length); g(70, 1); p.forEach(([x, y]) => pt(x, y)); });
+    });
+    (d.imagens || []).forEach(im => {
+      g(0, 'LWPOLYLINE'); g(5, H()); g(330, '17'); g(100, 'AcDbEntity'); g(8, 'IMAGEM'); g(100, 'AcDbPolyline'); g(90, 4); g(70, 1);
+      [[im.x, im.y], [im.x + im.w, im.y], [im.x + im.w, im.y + im.h], [im.x, im.y + im.h]].forEach(([x, y]) => pt(x, y));
+      g(0, 'TEXT'); g(5, H()); g(330, '17'); g(100, 'AcDbEntity'); g(8, 'IMAGEM'); g(100, 'AcDbText'); g(10, (im.x + im.w * 0.08).toFixed(2)); g(20, (d.H - im.y - im.h / 2).toFixed(2)); g(30, '0.0'); g(40, (Math.min(im.h, im.w) / 6).toFixed(2)); g(1, 'LOGO: ' + String(im.nome || 'imagem').replace(/[^\x20-\x7e]/g, '')); g(100, 'AcDbText');
+    });
+    return window.DG_DXF_TPL.replace('__ENTIDADES__', L.join('\n') + '\n').replace('__HANDSEED__', H())
+      .replace('__XMIN__', '0.0').replace('__YMIN__', '0.0').replace('__XMAX__', d.L.toFixed(1)).replace('__YMAX__', d.H.toFixed(1));
   }
-  /** WMF "placeable" (Aldus) com polígonos preenchidos (modo alternado) */
+  /** WMF "placeable" (Aldus) com polígonos preenchidos (modo alternado) — abre no CorelDRAW */
   function wmf(d) {
     const maxD = Math.max(d.L, d.H); const upi = Math.min(1440, Math.floor(32000 * 25.4 / maxD)); const k = upi / 25.4;
-    const recs = []; // cada registro: array de words (uint16)
-    const rec = (fn, params) => recs.push([0, 0, fn, ...params]); // tamanho preenchido depois
-    const s16 = (v) => (Math.round(v) & 0xffff);
+    const recs = []; const rec = (fn, params) => recs.push([0, 0, fn, ...params]); const s16 = (v) => (Math.round(v) & 0xffff);
     const W = Math.round(d.L * k), H = Math.round(d.H * k);
-    rec(0x020B, [0, 0]);              // SetWindowOrg (y, x)
-    rec(0x020C, [s16(H), s16(W)]);    // SetWindowExt (y, x)
-    rec(0x0106, [1]);                 // SetPolyFillMode ALTERNATE
-    rec(0x02FA, [5, 0, 0, 0, 0]);     // CreatePenIndirect PS_NULL → objeto 0
-    rec(0x012D, [0]);                 // SelectObject pen
-    let obj = 1;
-    d.camadas.forEach(c => {
-      const hex = (CORES[c.cor] || '#000000').slice(1); const r = parseInt(hex.substr(0, 2), 16), gg = parseInt(hex.substr(2, 2), 16), b = parseInt(hex.substr(4, 2), 16);
-      rec(0x02FC, [0, r | (gg << 8), b, 0]); // CreateBrushIndirect BS_SOLID, COLORREF
-      rec(0x012D, [obj]);                    // SelectObject brush
-      // PolyPolygon em blocos (registro máx. ~ 65k words)
-      let bloco = [];
-      const flush = () => { if (!bloco.length) return; const cont = bloco.map(p => p.length); const pts = [].concat(...bloco.map(p => [].concat(...p.map(([x, y]) => [s16(x * k), s16(y * k)])))); rec(0x0538, [bloco.length, ...cont, ...pts]); bloco = []; };
-      let n = 0; c.paths.forEach(p => { if (n + p.length * 2 > 30000) { flush(); n = 0; } bloco.push(p); n += p.length * 2 + 1; }); flush();
-      rec(0x01F0, [obj]);                    // DeleteObject (libera o índice para o próximo)
-    });
-    rec(0x01F0, [0]);
-    recs.push([3, 0, 0]);                    // fim
+    rec(0x020B, [0, 0]); rec(0x020C, [s16(H), s16(W)]); rec(0x0106, [1]); rec(0x02FA, [5, 0, 0, 0, 0]); rec(0x012D, [0]);
+    const poli = (paths, rgb) => {
+      rec(0x02FC, [0, rgb[0] | (rgb[1] << 8), rgb[2], 0]); rec(0x012D, [1]);
+      let bloco = []; const flush = () => { if (!bloco.length) return; const cont = bloco.map(p => p.length); const pts = [].concat(...bloco.map(p => [].concat(...p.map(([x, y]) => [s16(x * k), s16(y * k)])))); rec(0x0538, [bloco.length, ...cont, ...pts]); bloco = []; };
+      let n = 0; paths.forEach(p => { if (n + p.length * 2 > 30000) { flush(); n = 0; } bloco.push(p); n += p.length * 2 + 1; }); flush();
+      rec(0x01F0, [1]);
+    };
+    d.camadas.forEach(c => poli(c.paths, hexRGB(c.cor)));
+    (d.imagens || []).forEach(im => { const e = Math.max(2, Math.min(im.w, im.h) * 0.02); poli([[[im.x, im.y], [im.x + im.w, im.y], [im.x + im.w, im.y + im.h], [im.x, im.y + im.h]], [[im.x + e, im.y + e], [im.x + im.w - e, im.y + e], [im.x + im.w - e, im.y + im.h - e], [im.x + e, im.y + im.h - e]]], [120, 120, 120]); });
+    rec(0x01F0, [0]); recs.push([3, 0, 0]);
     recs.forEach(r => { const sz = r.length; r[0] = sz & 0xffff; r[1] = sz >>> 16; });
     const total = recs.reduce((a, r) => a + r.length, 0); const maxRec = Math.max(...recs.map(r => r.length));
-    const words = [];
-    // cabeçalho Aldus (22 bytes = 11 words)
-    const ald = [0xCDD7, 0x9AC6, 0, 0, 0, s16(W), s16(H), upi, 0, 0];
-    let chk = 0; ald.forEach(w => chk ^= w); ald.push(chk); words.push(...ald);
-    // cabeçalho WMF (9 words)
+    const words = []; const ald = [0xCDD7, 0x9AC6, 0, 0, 0, s16(W), s16(H), upi, 0, 0]; let chk = 0; ald.forEach(w => chk ^= w); ald.push(chk); words.push(...ald);
     words.push(1, 9, 0x0300, (total + 9) & 0xffff, (total + 9) >>> 16, 2, maxRec & 0xffff, maxRec >>> 16, 0);
     recs.forEach(r => words.push(...r));
-    const u8 = new Uint8Array(words.length * 2);
-    words.forEach((w, i) => { u8[2 * i] = w & 0xff; u8[2 * i + 1] = (w >> 8) & 0xff; });
+    const u8 = new Uint8Array(words.length * 2); words.forEach((w, i) => { u8[2 * i] = w & 0xff; u8[2 * i + 1] = (w >> 8) & 0xff; });
     let bin = ''; for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
     return btoa(bin);
   }
 
-  return { carregarFonte, desenhar, svg, jpg, pdf, dxf, wmf, ESQUEMAS, CLASSES, CORES, TAMANHOS, larguraTexto, serieDe };
+  return { carregarFonte, desenhar, svg, jpg, pdf, prancha, dxf, wmf, hexRGB, col, ESQUEMAS, CLASSES, CORES, TAMANHOS, larguraTexto, serieDe };
 })();
