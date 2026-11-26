@@ -77,6 +77,12 @@ const ICONS = (function () {
     BOE_S: () => svg(asf() + bordoD() + trac(C) + [0, 16, 32, 48].map(y => `<rect x="12" y="${y + 2}" width="3" height="8" fill="${BR}"/>`).join('')),
     BOD_A: () => svg(asf() + bordoE() + trac(C) + `<rect x="38" y="8" width="9" height="48" rx="2" fill="none" stroke="${VM}" stroke-width="2" stroke-dasharray="3 2"/>`),
     BOE_A: () => svg(asf() + bordoD() + trac(C) + `<rect x="9" y="8" width="9" height="48" rx="2" fill="none" stroke="${VM}" stroke-width="2" stroke-dasharray="3 2"/>`),
+    LOMB: () => svg(asf() + bordos() + trac(C)
+      + `<rect x="13" y="26" width="30" height="12" fill="#BDBDBD"/>`
+      + [0, 1, 2, 3, 4].map(i => `<path d="M${13 + i * 6} 38 l3 -12 l3 12z" fill="${i % 2 ? '#fff' : AM}"/>`).join('')),
+    DISP_INI: () => svg(asf() + bordos() + trac(C)
+      + `<path d="M43 40 Q52 34 60 14 L66 16 Q58 40 43 48z" fill="${ASF}"/>`
+      + `<circle cx="51" cy="54" r="8" fill="${VD}"/><path d="M47 54h8M51 50v8" stroke="#fff" stroke-width="2.4"/>`),
     // ── pontuais ──
     ZEB_INI: () => svg(asf() + bordos()
       + `<polygon points="28,8 34,30 28,58 22,30" fill="none" stroke="${AM}" stroke-width="2.5"/>`

@@ -375,6 +375,8 @@ public class MainActivity extends Activity {
         });
 
         WebSettings s = web.getSettings();
+        // tema claro sempre (alguns aparelhos, ex. Motorola, escureciam as listas de opções)
+        if (android.os.Build.VERSION.SDK_INT >= 29) { web.setForceDarkAllowed(false); try { s.setForceDark(WebSettings.FORCE_DARK_OFF); } catch (Throwable ignored) {} }
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);

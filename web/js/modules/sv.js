@@ -31,6 +31,34 @@
   };
   const LADOS = { D: 'Direito', E: 'Esquerdo', CC: 'Canteiro central', AE: 'Aérea (pórtico)' };
   const SUPORTES = ['Coluna simples', 'Coluna dupla', 'Semipórtico', 'Pórtico', 'Poste existente', 'Fixada em estrutura', 'Sem suporte'];
+  const MATERIAIS_SUP = ['Aço galvanizado', 'Madeira'];
+  const SECOES = { 'Aço galvanizado': ['Ø 2½"', 'Ø 3"', 'Ø 4"'], 'Madeira': ['8 × 8 cm', '10 × 10 cm', '12 × 12 cm'] };
+  // DER-SP Vol. II: Tipo I (classes II–IV) 800 mm, Tipo II (classe Ib) 1000 mm, Tipo III (classes 0 e Ia) 1200 mm.
+  // A velocidade de projeto do trecho sobe o tipo: acima de 80 km/h no mínimo Tipo II, acima de 100 km/h Tipo III.
+  const TIPO_TAM = { I: 0.8, II: 1.0, III: 1.2 };
+  function tipoDER(p) {
+    p = p || {}; const ord = ['I', 'II', 'III'];
+    let t = { '0': 'III', 'Ia': 'III', 'Ib': 'II', 'II': 'I', 'III': 'I', 'IV': 'I' }[p.classe] || 'I';
+    const v = +p.velocidade || 0;
+    if (v > 100) t = 'III'; else if (v > 80 && ord.indexOf(t) < 1) t = 'II';
+    return t;
+  }
+  /** largura × altura (m) da placa conforme o tipo DER; null para placas sem tamanho padrão */
+  function dimsNorma(cod, cat, p) {
+    const t = tipoDER(p), S = TIPO_TAM[t]; const c = codDe(cod || '') || '';
+    if (cat === 'R') { if (c === 'R-2') return { t, larg: S, alt: +(S * 0.866).toFixed(2) }; return { t, larg: S, alt: S }; }
+    if (cat === 'A') { if (/^A-26/.test(c)) return { t, larg: +(S * 1.5).toFixed(2), alt: +(S * 0.5).toFixed(2) }; return { t, larg: S, alt: S }; }
+    return null;
+  }
+  /** placas que têm um valor escrito (velocidade, limites) ou texto livre */
+  function pedeTexto(cod, cat) {
+    const c = codDe(cod || '') || '';
+    if (cod === '__outro' || !['R', 'A'].includes(cat)) return 'Texto na placa';
+    if (c === 'R-19') return 'Velocidade (km/h)';
+    if (/^R-1[4-8]$/.test(c)) return 'Limite indicado na placa';
+    if (/^A-(37|38|39|46|47)/.test(c)) return 'Valor indicado na placa';
+    return null;
+  }
   const PELICULAS = ['Não verificada', 'Grau técnico', 'Alta intensidade', 'Grau diamante / prismática', 'Sem película refletiva'];
   // dispositivos de segurança por trecho e pontuais
   const SEGS = { DEF: { n: 'Defensa metálica', tipos: ['Simples', 'Dupla', 'Semimaleável', 'Maleável'] }, BAR: { n: 'Barreira rígida', tipos: ['New Jersey', 'Perfil F', 'Vertical', 'Simples (meia barreira)'] } };
@@ -109,6 +137,10 @@
     },
     filtros, passaFiltro,
     filtroLista: (ev) => passaFiltro(ev, filtroTela),
+    // filtro compacto junto aos registros (também disponível na exportação)
+    filtroUI: () => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:12px;color:var(--sub);font-weight:700">Mostrar:</span>
+      <select class="inp" style="flex:1;padding:6px 8px" onchange="SV.filtrar(this.value)">${[{ v: '', t: 'Todos os registros' }, { v: '__problema', t: 'Só com problema' }].concat(ESTADOS.slice(1).map(e => ({ v: e.v, t: e.v })))
+        .map(f => `<option value="${esc(f.v)}" ${filtroTela === f.v ? 'selected' : ''}>${esc(f.t)}</option>`).join('')}</select></div>`,
 
     camposAbertura(u) {
       u = u || {};
@@ -119,12 +151,14 @@
         <div class="fgrid">
           <div class="field"><label>Contrato / referência</label><input class="inp" id="sv-ref" value="${esc(u.ref || '')}"></div>
           <div class="field"><label>Pista</label>${sel('sv-pista', ['Simples', 'Dupla'], u.pista || 'Simples')}</div>
+          <div class="field"><label>Classe da rodovia (DER)</label>${sel('sv-classe', ['0', 'Ia', 'Ib', 'II', 'III', 'IV'], u.classe || 'II')}</div>
+          <div class="field"><label>Velocidade de projeto (km/h)</label><input class="inp" id="sv-vel" inputmode="numeric" value="${esc(u.velocidade || '')}" placeholder="ex.: 80"></div>
           <div class="field"><label>Lados levantados</label>${sel('sv-lados', ['Direito', 'Esquerdo', 'Ambos'], u.lados || 'Direito')}</div>
         </div>
-        <p class="help">Códigos das placas de regulamentação e advertência conforme o índice do Manual Brasileiro de Sinalização de Trânsito, Vol. I e II (CONTRAN, 2022). O catálogo pode ser completado no próprio app.</p>`;
+        <p class="help">Classe e velocidade definem o tamanho das placas pela norma do DER (Tipo I 0,80 m · II 1,00 m · III 1,20 m). Códigos das placas de regulamentação e advertência conforme o índice do Manual Brasileiro de Sinalização de Trânsito, Vol. I e II (CONTRAN, 2022). O catálogo pode ser completado no próprio app.</p>`;
     },
     lerAbertura() {
-      return { orgao: val('sv-org').trim(), tipo: val('sv-tipo'), ref: val('sv-ref').trim(), pista: val('sv-pista'), lados: val('sv-lados') };
+      return { orgao: val('sv-org').trim(), tipo: val('sv-tipo'), ref: val('sv-ref').trim(), pista: val('sv-pista'), lados: val('sv-lados'), classe: val('sv-classe'), velocidade: parseInt(val('sv-vel')) || null };
     },
 
     painel(s) {
@@ -138,7 +172,6 @@
           ${b('OBR', 'Obras', "SV.placa('OBR')")}</div></div>
         <div class="sh-grp"><div class="sh-grp-t">Dispositivos de segurança</div><div class="sh-grid">
           ${b('DEF', 'Defensa', "SV.iniSeg('DEF')", 'início do trecho')}${b('BAR', 'Barreira rígida', "SV.iniSeg('BAR')", 'início do trecho')}${b('DISP', 'Outro dispositivo', 'SV.disp()', 'terminal, atenuador...')}</div></div>
-        <div class="sh-grp"><div class="sh-grp-t">Mostrar na lista</div><div class="chips" id="sv-filtro"></div></div>
         <div style="display:flex;gap:8px;margin-top:6px"><button class="btn-sm n" style="flex:1" onclick="Export.open()">📤 Exportar</button><button class="btn-sm g" style="flex:1" onclick="SV.editarCatalogo()">✏️ Catálogo de placas</button></div>
       </div>`;
     },
@@ -149,8 +182,6 @@
       const prob = n.filter(e => problema(estadoDe(e))).length;
       $('sv-state').innerHTML = `Itens: <b>${n.length}</b> · com problema: <b style="color:${prob ? '#C62828' : 'inherit'}">${prob}</b>` + (s.params && s.params.orgao ? ' · ' + esc(s.params.orgao) : '');
       $('sv-abertos').innerHTML = abertosAgora(s).map(t => `<button class="btn-full" style="margin-bottom:8px;background:#C62828;color:#fff" onclick="SV.fimSeg('${t.sid}')">⏹ Fim ${esc(SEGS[t.elem].n.toLowerCase())} · ${esc(LADOS[t.lado])} <small style="opacity:.8">(desde ${esc(posTxt(s, t.ini))})</small></button>`).join('');
-      $('sv-filtro').innerHTML = [{ v: '', t: 'Todos' }, { v: '__problema', t: 'Com problema' }].concat(ESTADOS.slice(1).map(e => ({ v: e.v, t: e.v.split(' ')[0] })))
-        .map(f => `<button class="chip ${filtroTela === f.v ? 'sel' : ''}" onclick="SV.filtrar('${esc(f.v)}')">${esc(f.t)}</button>`).join('');
     },
 
     relatorio(s, ctx) {
@@ -203,39 +234,75 @@
   };
 
   // ── formulários ─────────────────────────────────────────────
-  const chipsLado = () => `<div class="field"><label>Lado</label><div class="chips">${Object.keys(LADOS).map(k => `<button class="chip" id="sv-l-${k}" onclick="SV.lado('${k}')">${LADOS[k]}</button>`).join('')}</div></div>`;
+  const ladosDa = (s) => (s && s.params && s.params.pista === 'Dupla') ? ['D', 'CC', 'AE'] : ['D', 'E', 'AE'];
+  const nomeLado = (s, k) => k === 'E' && !(s && s.params && s.params.pista === 'Dupla') ? 'Esquerdo (lado oposto)' : LADOS[k];
+  const chipsLado = () => `<div class="field"><label>Lado</label><div class="chips">${ladosDa(Core.S()).map(k => `<button class="chip" id="sv-l-${k}" onclick="SV.lado('${k}')">${nomeLado(Core.S(), k)}</button>`).join('')}</div></div>`;
   const chipsEstado = () => `<div class="field"><label>Estado de conservação</label><div class="chips">${ESTADOS.map((e, i) => `<button class="chip" id="sv-e-${i}" onclick="SV.estado(${i})">${esc(e.v)}</button>`).join('')}</div></div>`;
   const blocoFoto = () => `<div class="field"><button class="btn-cam" id="sv-cam" onclick="SV.foto()">📷 Tirar foto</button><div id="sv-fotos" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div>`;
   const cabPos = (s) => `<div class="field"><label>Posição (travada no toque)</label><div class="preview-fmt">${esc(posTxt(s, frozen) + ' · ' + fmtCoord(frozen.lat, frozen.lon))}</div></div>`;
   function marcar() {
     Object.keys(LADOS).forEach(k => { const b = $('sv-l-' + k); if (b) b.className = 'chip' + (lado === k ? ' sel' : ''); });
     ESTADOS.forEach((e, i) => { const b = $('sv-e-' + i); if (b) { b.className = 'chip' + (estado === e.v ? ' sel' : ''); b.style.borderColor = estado === e.v ? e.cor : ''; } });
+    if ($('sv-ruim')) $('sv-ruim').style.display = estado === 'Bom' ? 'none' : '';
     const el = $('sv-fotos'); const s = Core.S();
     if (el) { el.innerHTML = fotos.map(f => `<img class="photo-thumb" src="${Photo.src(s, f)}">`).join(''); $('sv-cam').className = 'btn-cam' + (fotos.length ? ' has' : ''); $('sv-cam').textContent = fotos.length ? '📷 Mais uma foto (' + fotos.length + ')' : '📷 Tirar foto'; }
   }
+  // valores escolhidos por botões (no lugar das listas do sistema, que mudam de cor conforme o aparelho)
+  let fv = {};
+  const chipsDe = (key, ops, v) => `<div class="chips" id="sv-ch-${key}">${ops.map(o => `<button type="button" class="chip ${o === v ? 'sel' : ''}" data-v="${esc(o)}" onclick="SV._ch('${key}',this)">${esc(o)}</button>`).join('')}</div>`;
   function formPlaca(title, ev) {
-    const s = Core.S(); const d = (ev && ev.dados) || {}; const lista = catalogo()[cat] || [];
-    const atual = d.codigo || localStorage.getItem('sv_ult_' + cat) || lista[0] || '';
+    const s = Core.S(); const d = (ev && ev.dados) || {}; const p = s.params || {};
+    codSel = d.codigo || '';
+    const mat = d.supMat || localStorage.getItem('sv_ult_supmat') || 'Aço galvanizado';
+    fv = { supMat: mat, sup: d.suporte || localStorage.getItem('sv_ult_sup') || 'Coluna simples', secao: d.secao || (SECOES[mat] || [])[0], pel: d.pelicula || 'Não verificada' };
     UI.modal(title, `${cabPos(s)}
-      <div class="field"><label>Categoria</label><select class="inp" id="sv-cat" onchange="SV.trocaCat(this.value)">${Object.keys(CAT).map(k => `<option value="${k}" ${k === cat ? 'selected' : ''}>${CAT[k].n}</option>`).join('')}</select></div>
-      <div class="field"><label>Placa</label><input class="inp" id="sv-busca" placeholder="🔎 filtrar: ex. 19, curva, lombada" oninput="SV.buscar()" style="margin-bottom:8px">
+      <div class="field"><label>Categoria</label>${`<div class="chips">${Object.keys(CAT).map(k => `<button type="button" class="chip ${k === cat ? 'sel' : ''}" onclick="SV.trocaCat('${k}')">${CAT[k].n}</button>`).join('')}</div>`}</div>
+      <div class="field" id="sv-escolha"><label>Placa</label><input class="inp" id="sv-busca" placeholder="🔎 filtrar: ex. 19, curva, lombada" oninput="SV.buscar()" style="margin-bottom:8px">
         <div class="sv-grade" id="sv-grade"></div>
         <input class="inp" id="sv-outro" style="margin-top:6px;display:none" placeholder="ex.: placa de indicação com destinos"></div>
-      <div class="field"><label>Texto / valor na placa</label><input class="inp" id="sv-leg" value="${esc(d.legenda || '')}" placeholder="ex.: 80 km/h, Ribeirão Preto 12 km"></div>
-      ${chipsLado()}${chipsEstado()}
-      <div class="fgrid">
-        <div class="field"><label>Largura (m)</label><input class="inp" id="sv-lg" inputmode="decimal" value="${d.larg ? nf(d.larg, 2) : ''}"></div>
-        <div class="field"><label>Altura da placa (m)</label><input class="inp" id="sv-al" inputmode="decimal" value="${d.alt ? nf(d.alt, 2) : ''}"></div>
-        <div class="field"><label>Altura livre (m)</label><input class="inp" id="sv-hl" inputmode="decimal" value="${d.altLivre ? nf(d.altLivre, 2) : ''}"></div>
-        <div class="field"><label>Afastamento (m)</label><input class="inp" id="sv-af" inputmode="decimal" value="${d.afast ? nf(d.afast, 2) : ''}"></div>
-        <div class="field"><label>Suporte</label><select class="inp" id="sv-sup">${SUPORTES.map(x => `<option ${x === (d.suporte || localStorage.getItem('sv_ult_sup')) ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-        <div class="field"><label>Película</label><select class="inp" id="sv-pel">${PELICULAS.map(x => `<option ${x === d.pelicula ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-      </div>
-      <div class="field" style="margin-top:12px"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2">${esc(ev ? ev.obs : '')}</textarea></div>
-      ${blocoFoto()}
-      <button class="btn-full" onclick="SV.salvarPlaca()">✓ Salvar placa</button>`);
-    codSel = atual; grade('');
-    marcar();
+      <div class="field" id="sv-escolhida" style="display:none"></div>
+      <div id="sv-resto" style="display:none">
+        <div class="field" id="sv-leg-w"><label id="sv-leg-l">Texto / valor</label><input class="inp" id="sv-leg" value="${esc(d.legenda || '')}"></div>
+        ${chipsLado()}${chipsEstado()}
+        <div id="sv-ruim">
+          <div class="field"><label>Película</label>${chipsDe('pel', PELICULAS, fv.pel)}</div>
+          <div class="field"><label>Observação</label><textarea class="inp" id="sv-obs" rows="2">${esc(ev ? ev.obs : '')}</textarea></div>
+        </div>
+        <details class="sv-det" id="sv-det"><summary id="sv-det-s">Dimensões e suporte</summary>
+          <div class="fgrid" style="margin-top:8px">
+            <div class="field"><label>Largura (m)</label><input class="inp" id="sv-lg" inputmode="decimal" value="${d.larg ? nf(d.larg, 2) : ''}" oninput="SV._resumo()"></div>
+            <div class="field"><label>Altura da placa (m)</label><input class="inp" id="sv-al" inputmode="decimal" value="${d.alt ? nf(d.alt, 2) : ''}" oninput="SV._resumo()"></div>
+            <div class="field"><label>Altura livre (m)</label><input class="inp" id="sv-hl" inputmode="decimal" value="${d.altLivre ? nf(d.altLivre, 2) : ''}"></div>
+            <div class="field"><label>Afastamento (m)</label><input class="inp" id="sv-af" inputmode="decimal" value="${d.afast ? nf(d.afast, 2) : ''}"></div>
+          </div>
+          <div class="field"><label>Suporte</label>${chipsDe('sup', SUPORTES, fv.sup)}</div>
+          <div class="field"><label>Material do suporte</label>${chipsDe('supMat', MATERIAIS_SUP, fv.supMat)}</div>
+          <div class="field"><label>Seção do suporte</label><div id="sv-secao-w">${chipsDe('secao', SECOES[fv.supMat] || [], fv.secao)}</div></div>
+        </details>
+        ${blocoFoto()}
+        <button class="btn-full" onclick="SV.salvarPlaca()">✓ Salvar placa</button>
+      </div>`);
+    grade(''); escolhida(!!codSel); marcar();
+  }
+  /** com a placa escolhida, a grade some e aparecem só os campos que ela pede */
+  function escolhida(sim) {
+    const s = Core.S(); const p = s.params || {};
+    $('sv-escolha').style.display = sim ? 'none' : '';
+    $('sv-escolhida').style.display = sim ? '' : 'none';
+    $('sv-resto').style.display = sim ? '' : 'none';
+    if (!sim) return;
+    const nome = codSel === '__outro' ? (val('sv-outro') || 'Outra placa') : codSel;
+    const c = codDe(nome); const tx = c ? nome.slice(c.length).trim() : nome;
+    $('sv-escolhida').innerHTML = `<label>Placa</label><div style="display:flex;align-items:center;gap:10px;background:var(--bg);border-radius:12px;padding:8px">
+      ${codSel === '__outro' ? '<span style="font-size:30px">✏️</span>' : figura(nome, cat, 52)}<div style="flex:1"><b>${esc(c || '')}</b><br><span style="font-size:13px">${esc(tx)}</span></div>
+      <button class="btn-sm g" onclick="SV.trocar()">Trocar</button></div>`;
+    const pt = pedeTexto(codSel, cat);
+    $('sv-leg-w').style.display = pt ? '' : 'none'; if (pt) $('sv-leg-l').textContent = pt;
+    // dimensões pela norma (se ainda não informadas)
+    const dn = dimsNorma(nome, cat, p);
+    if (dn && !val('sv-lg')) $('sv-lg').value = nf(dn.larg, 2);
+    if (dn && !val('sv-al')) $('sv-al').value = nf(dn.alt, 2);
+    SV._resumo();
   }
   let codSel = '';
   function grade(q) {
@@ -269,7 +336,7 @@
       <button class="btn-full" onclick="SV.salvarDisp()">✓ Salvar dispositivo</button>`);
     marcar();
   }
-  function iniciaForm(s) { frozen = Core.pos(s); editId = null; fotos = []; estado = 'Bom'; lado = (s.params && s.params.lados === 'Esquerdo') ? 'E' : 'D'; }
+  function iniciaForm(s) { frozen = Core.pos(s); editId = null; fotos = []; estado = 'Bom'; lado = (s.params && s.params.lados === 'Esquerdo') ? (s.params.pista === 'Dupla' ? 'CC' : 'E') : 'D'; }
   function numOrNull(id) { const v = num(id); return isNaN(v) ? null : v; }
   function salvar(data) {
     const s = Core.S();
@@ -280,9 +347,23 @@
 
   window.SV = {
     placa(c) { const s = Core.S(); if (!s) return; iniciaForm(s); cat = c; formPlaca('🪧 ' + CAT[c].n, null); },
-    trocaCat(c) { cat = c; const keep = { legenda: val('sv-leg') }; const ev = editId ? Core.S().eventos.find(e => e.id === editId) : null; formPlaca($('mg-title').innerHTML, ev ? Object.assign({}, ev, { dados: Object.assign({}, ev.dados, { codigo: '' }, keep) }) : { obs: val('sv-obs'), dados: keep }); },
+    trocaCat(c) { cat = c; const keep = { legenda: '' }; const ev = editId ? Core.S().eventos.find(e => e.id === editId) : null; formPlaca($('mg-title').innerHTML, ev ? Object.assign({}, ev, { dados: Object.assign({}, ev.dados, { codigo: '' }, keep) }) : { obs: val('sv-obs'), dados: keep }); },
     buscar() { grade(val('sv-busca')); },
-    escolher(el) { codSel = el.dataset.v; document.querySelectorAll('.sv-pl').forEach(b => b.classList.toggle('sel', b === el)); $('sv-outro').style.display = codSel === '__outro' ? 'block' : 'none'; if (codSel === '__outro') $('sv-outro').focus(); },
+    escolher(el) {
+      codSel = el.dataset.v; document.querySelectorAll('.sv-pl').forEach(b => b.classList.toggle('sel', b === el));
+      if (codSel === '__outro') { $('sv-outro').style.display = 'block'; $('sv-outro').focus(); $('sv-outro').onchange = () => { if (val('sv-outro').trim()) escolhida(true); }; return; }
+      $('sv-lg').value = ''; $('sv-al').value = ''; escolhida(true);
+    },
+    trocar() { escolhida(false); $('sv-busca').value = ''; grade(''); },
+    _ch(key, el) {
+      fv[key] = el.dataset.v; el.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('sel', c === el));
+      if (key === 'supMat') { fv.secao = (SECOES[fv.supMat] || [])[0]; $('sv-secao-w').innerHTML = chipsDe('secao', SECOES[fv.supMat] || [], fv.secao); }
+      SV._resumo();
+    },
+    _resumo() {
+      if (!$('sv-det-s')) return; const s = Core.S(); const t = tipoDER(s.params);
+      $('sv-det-s').innerHTML = `Dimensões e suporte · <b>${esc(val('sv-lg') || '?')} × ${esc(val('sv-al') || '?')} m</b>${['R', 'A'].includes(cat) ? ' (Tipo ' + t + ')' : ''} · ${esc(fv.sup)}${fv.sup !== 'Sem suporte' && fv.sup !== 'Poste existente' && fv.sup !== 'Fixada em estrutura' ? ' · ' + esc(fv.supMat.split(' ')[0].toLowerCase() + ' ' + (fv.secao || '')) : ''}`;
+    },
     lado(k) { lado = k; marcar(); },
     estado(i) { estado = ESTADOS[i].v; marcar(); },
     filtrar(v) { filtroTela = v; UI.renderEvents(); M.atualizar(Core.S()); },
@@ -298,9 +379,11 @@
       let cod = codSel; if (cod === '__outro' || !cod) cod = val('sv-outro').trim();
       if (!cod) { toast('Escolha ou digite a placa'); return; }
       if (codSel !== '__outro') localStorage.setItem('sv_ult_' + cat, cod);
-      localStorage.setItem('sv_ult_sup', val('sv-sup'));
-      salvar({ grupo: 'placa', cod: cat, rotulo: cod, obs: val('sv-obs').trim(),
-        dados: { cat, codigo: cod, legenda: val('sv-leg').trim(), lado, estado, larg: numOrNull('sv-lg'), alt: numOrNull('sv-al'), altLivre: numOrNull('sv-hl'), afast: numOrNull('sv-af'), suporte: val('sv-sup'), pelicula: val('sv-pel') } });
+      localStorage.setItem('sv_ult_sup', fv.sup); localStorage.setItem('sv_ult_supmat', fv.supMat);
+      const bom = estado === 'Bom';
+      salvar({ grupo: 'placa', cod: cat, rotulo: cod, obs: bom ? '' : val('sv-obs').trim(),
+        dados: { cat, codigo: cod, legenda: pedeTexto(codSel, cat) ? val('sv-leg').trim() : '', lado, estado, larg: numOrNull('sv-lg'), alt: numOrNull('sv-al'), altLivre: numOrNull('sv-hl'), afast: numOrNull('sv-af'),
+          suporte: fv.sup, supMat: fv.supMat, secao: fv.secao, pelicula: bom ? 'Não verificada' : fv.pel, tipoDER: ['R', 'A'].includes(cat) ? tipoDER(Core.S().params) : null } });
     },
     iniSeg(elem) { const s = Core.S(); if (!s) return; iniciaForm(s); formSeg('▶ Início ' + SEGS[elem].n.toLowerCase(), null, elem, false); },
     fimSeg(sid) {

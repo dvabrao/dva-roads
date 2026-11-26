@@ -1,3 +1,4 @@
+:root{color-scheme:light only;}
 :root{
   --blue:#111D3D;--blue2:#1A2F5E;--green:#1B5E20;--green2:#2E7D32;
   --yellow:#F5C500;--yellow2:#FFD740;
@@ -299,6 +300,10 @@ select.inp{appearance:auto;}
 .sh-state b{color:var(--blue);}
 .sh-btn .sh-pat-ico{width:34px;height:34px;flex-shrink:0;}
 .sh-btn span{display:block;}
+/* botões só com a figura, maiores */
+.sh-btn.ico{min-height:84px;padding:6px 2px;}
+.sh-btn.ico svg{width:66px;height:66px;}
+#sh-g-bo .sh-btn.ico svg{width:56px;height:56px;}
 .sv-ico svg{width:34px;height:34px;display:block;}
 .sv-grade{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-height:46vh;overflow:auto;padding:2px;}
 .sv-pl{background:#fff;border:2px solid #D5DCE4;border-radius:10px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;text-align:center;}
@@ -308,3 +313,9 @@ select.inp{appearance:auto;}
 .sv-fig{object-fit:contain;display:block;}
 .sv-fig-fb{display:block;}
 .sv-fig-fb svg{width:100%;height:100%;}
+
+/* bloco recolhível (dimensões e suporte) */
+.sv-det{border:1.5px solid var(--border);border-radius:12px;padding:10px 12px;margin:10px 0;background:#fff;}
+.sv-det summary{font-size:13px;font-weight:700;color:var(--blue);cursor:pointer;list-style:none;}
+.sv-det summary::before{content:'▸ ';}
+.sv-det[open] summary::before{content:'▾ ';}

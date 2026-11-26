@@ -117,8 +117,9 @@ const UI = (function () {
           ${ev.grupo === 'ia' ? `<button class="pt-edit" onclick="IA.editar('${ev.id}')">🤖</button>` : m && m.editar ? `<button class="pt-edit" onclick="Modules.get('${m.id}').editar('${ev.id}')">✏️</button>` : ''}
           <button class="pt-del" onclick="UI.askDelEvent('${ev.id}')">🗑</button></div>`;
       }).join('');
-    if ($('ev-list')) $('ev-list').innerHTML = html;
-    $('ev-list-tablet').innerHTML = html;
+    const fh = s.eventos.length && m && m.filtroUI ? m.filtroUI() : '';
+    if ($('ev-list')) $('ev-list').innerHTML = fh + html;
+    $('ev-list-tablet').innerHTML = fh + html;
     if (m && m.atualizar) m.atualizar(s);
   }
   function askDelEvent(id) {

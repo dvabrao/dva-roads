@@ -118,6 +118,7 @@ ${typeof IA !== 'undefined' ? IA.relatorio(s) : ''}
         <button class="exp-opt" onclick="Export.go('kmz')"><span class="ico">📦</span><div><div class="lbl">KMZ com fotos</div><div class="sub">Um arquivo só, fotos dentro dos pontos</div></div></button>
         <button class="exp-opt" onclick="Export.go('html')"><span class="ico">🌐</span><div><div class="lbl">Relatório HTML</div><div class="sub">WhatsApp / Drive / e-mail</div></div></button>
         <button class="exp-opt" onclick="Nuvem.enviar(val('exp-sec'))"><span class="ico">☁️</span><div><div class="lbl">Enviar ao painel web</div><div class="sub">Inventário no computador · mapa, filtros e Excel</div></div></button>
+        <div id="exp-extra"></div>
         <button class="exp-opt" onclick="Export.go('zip')"><span class="ico">💾</span><div><div class="lbl">Backup da sessão (.zip)</div><div class="sub">Tudo: dados, trajeto, fotos · envie ao Google Drive</div></div></button>
       </div>`);
     filtroUI();
@@ -126,6 +127,7 @@ ${typeof IA !== 'undefined' ? IA.relatorio(s) : ''}
   function filtroUI() {
     const r = Core.index().find(x => x.pasta === val('exp-sec')); const m = r && Modules.get(r.modulo);
     const w = $('exp-f-wrap'); if (!w) return;
+    if ($('exp-extra')) $('exp-extra').innerHTML = m && m.exportExtra ? m.exportExtra(val('exp-sec')) : '';
     if (m && m.filtros) { $('exp-filtro').innerHTML = m.filtros().map(f => `<option value="${esc(f.v)}">${esc(f.t)}</option>`).join(''); w.style.display = 'block'; }
     else { $('exp-filtro').innerHTML = ''; w.style.display = 'none'; }
   }
@@ -159,5 +161,11 @@ ${typeof IA !== 'undefined' ? IA.relatorio(s) : ''}
     }
   }
 
-  return { kml, report, open, go, filtroUI, trechoTrack, kmlColor };
+  /** abre a impressão de um HTML pronto (“Salvar como PDF”) */
+  function imprimir(html, nome) {
+    if (typeof window.NativePrint !== 'undefined' && window.NativePrint.printHtml) { window.NativePrint.printHtml(html, nome); return; }
+    const w = window.open('', '_blank');
+    if (w) { w.document.write(html.replace('</body>', '<script>setTimeout(function(){print()},400)<\/script></body>')); w.document.close(); }
+  }
+  return { kml, report, open, go, filtroUI, trechoTrack, kmlColor, imprimir, sessaoPor };
 })();
