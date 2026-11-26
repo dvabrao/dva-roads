@@ -61,6 +61,22 @@ const ICONS = (function () {
     BO_RET: () => svg(asf() + bordoE() + bordoD(0, 34) + trac(C)
       + `<rect x="41" y="44" width="3" height="20" fill="#7A8088"/>`
       + `<path d="M42.5 28 l5 7 h-10 z" fill="${VD}"/>`),
+    // ── divisão de faixas do mesmo sentido (LMS, branca) ──
+    'LMS-1': () => svg(asf() + bordos() + trac(C, BR)),
+    'LMS-2': () => svg(asf() + bordos() + cheia(C, BR)),
+    DIV_SEM: () => svg(asf() + bordos()
+      + `<line x1="20" y1="22" x2="36" y2="42" stroke="#9AA0A8" stroke-width="3" stroke-linecap="round"/>`
+      + `<line x1="36" y1="22" x2="20" y2="42" stroke="#9AA0A8" stroke-width="3" stroke-linecap="round"/>`),
+    // ── abrir / fechar faixa (vale para 2→3, 3→4…) ──
+    FX_MAIS_D: () => svg(faixaAdic('D', true) + `<circle cx="51" cy="54" r="8" fill="${VD}"/><path d="M47 54h8M51 50v8" stroke="#fff" stroke-width="2.4"/>`),
+    FX_MENOS_D: () => svg(faixaAdic('D', false) + `<circle cx="51" cy="10" r="8" fill="${VM}"/><path d="M47 10h8" stroke="#fff" stroke-width="2.4"/>`),
+    FX_MAIS_E: () => svg(faixaAdic('E', true) + `<circle cx="5" cy="54" r="8" fill="${VD}"/><path d="M1 54h8M5 50v8" stroke="#fff" stroke-width="2.4"/>`),
+    FX_MENOS_E: () => svg(faixaAdic('E', false) + `<circle cx="5" cy="10" r="8" fill="${VM}"/><path d="M1 10h8" stroke="#fff" stroke-width="2.4"/>`),
+    // ── bordos (toque liga, toque de novo volta ao contínuo) ──
+    BOD_S: () => svg(asf() + bordoE() + trac(C) + [0, 16, 32, 48].map(y => `<rect x="41" y="${y + 2}" width="3" height="8" fill="${BR}"/>`).join('')),
+    BOE_S: () => svg(asf() + bordoD() + trac(C) + [0, 16, 32, 48].map(y => `<rect x="12" y="${y + 2}" width="3" height="8" fill="${BR}"/>`).join('')),
+    BOD_A: () => svg(asf() + bordoE() + trac(C) + `<rect x="38" y="8" width="9" height="48" rx="2" fill="none" stroke="${VM}" stroke-width="2" stroke-dasharray="3 2"/>`),
+    BOE_A: () => svg(asf() + bordoD() + trac(C) + `<rect x="9" y="8" width="9" height="48" rx="2" fill="none" stroke="${VM}" stroke-width="2" stroke-dasharray="3 2"/>`),
     // ── pontuais ──
     ZEB_INI: () => svg(asf() + bordos()
       + `<polygon points="28,8 34,30 28,58 22,30" fill="none" stroke="${AM}" stroke-width="2.5"/>`
