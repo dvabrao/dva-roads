@@ -34,10 +34,11 @@
     { g: 'div', cod: 'LMS-2', r: 'Divisão de faixas contínua (LMS-2)', l: 'Contínua', c: 'LMS-2' },
     { g: 'div', cod: 'DIV_SEM', r: 'Divisão de faixas sem pintura', l: 'Sem pintura' },
     // faixas
-    { g: 'fx', cod: 'FX_MAIS_E', r: 'Abre faixa à esquerda', l: '+ Faixa esq.', lado: 'E', delta: 1 },
-    { g: 'fx', cod: 'FX_MAIS_D', r: 'Abre faixa à direita', l: '+ Faixa dir.', lado: 'D', delta: 1 },
-    { g: 'fx', cod: 'FX_MENOS_E', r: 'Fecha faixa à esquerda', l: '− Faixa esq.', lado: 'E', delta: -1 },
-    { g: 'fx', cod: 'FX_MENOS_D', r: 'Fecha faixa à direita', l: '− Faixa dir.', lado: 'D', delta: -1 },
+    // faixa adicional: um botão por lado — toque abre (fica aceso), toque de novo fecha
+    { g: 'fx', cod: 'FX_MAIS_E', r: 'Início de faixa adicional à esquerda', l: 'Faixa adicional esq.', lado: 'E', delta: 1 },
+    { g: 'fx', cod: 'FX_MAIS_D', r: 'Início de faixa adicional à direita', l: 'Faixa adicional dir.', lado: 'D', delta: 1 },
+    { g: 'fx', cod: 'FX_MENOS_E', r: 'Término de faixa adicional à esquerda', l: 'Fim faixa adic. esq.', lado: 'E', delta: -1, oculto: 1 },
+    { g: 'fx', cod: 'FX_MENOS_D', r: 'Término de faixa adicional à direita', l: 'Fim faixa adic. dir.', lado: 'D', delta: -1, oculto: 1 },
     // bordos (toque liga; toque de novo registra o retorno ao contínuo)
     { g: 'bo', cod: 'BOE_S', r: 'Bordo esquerdo seccionado', l: 'Bordo esq. seccionado', lado: 'E', est: 'S' },
     { g: 'bo', cod: 'BOD_S', r: 'Bordo direito seccionado', l: 'Bordo dir. seccionado', lado: 'D', est: 'S' },
@@ -237,8 +238,8 @@
         <div class="sh-undo"><button class="btn-sm g" onclick="SH.desfazer()">↶ Desfazer último</button><button class="btn-sm n" onclick="SH.detalhe()">📷 Foto / obs. no último</button></div>
         <div id="sh-g-eixo">${grp('Eixo (amarelo)', ['LFO-2', 'LFO-1', 'LFO-3', 'LFO-4E', 'LFO-4D', 'LFO-5', 'SEM'])}</div>
         ${grp('Divisão entre faixas do mesmo sentido (branco)', ['LMS-1', 'LMS-2', 'DIV_SEM'])}
-        ${grp('Faixas · abre e fecha uma por toque', ['FX_MAIS_D', 'FX_MENOS_D', 'FX_MAIS_E', 'FX_MENOS_E'], 1)}
-        ${grp('Bordos · toque liga, toque de novo volta ao contínuo', ['BOD_S', 'BOD_A', 'BOE_S', 'BOE_A'], 1)}
+        ${grp('Faixa adicional · toque inicia (aceso), toque de novo termina', ['FX_MAIS_E', 'FX_MAIS_D'], 1)}
+        ${grp('Bordos · padrão contínuo · toque liga (aceso), toque de novo volta ao contínuo', ['BOE_S', 'BOD_S', 'BOE_A', 'BOD_A'], 1)}
         ${grp('Zebrado e tachas · liga / desliga', ['ZEB_INI', 'TA_INI'], 1)}
         ${grp('Pontuais', ['FX_PED', 'LRE', 'DESG'])}
         <p class="help" style="text-align:center">Toque = registra na hora · toque longo = registra e abre foto e observação</p>
@@ -264,6 +265,7 @@
         if (b.g === 'eixo') on = e.eixo === b.cod;
         else if (b.g === 'div') on = e.div === b.cod;
         else if (b.g === 'bo') on = e.bo[b.lado] === b.est;
+        else if (b.g === 'fx') on = e[b.lado] > 0;
         else if (b.g === 'zeb') on = e.zeb;
         else if (b.g === 'tachas') on = e.tachas;
         el.classList.toggle('on', !!on);
@@ -409,6 +411,8 @@
       else if (cod === 'ZEB_INI' && e.zeb) cod = 'ZEB_FIM';
       else if (cod === 'TA_INI' && e.tachas) cod = 'TA_FIM';
       else if (BY[cod] && BY[cod].g === 'bo' && e.bo[BY[cod].lado] === BY[cod].est) cod = 'BO' + BY[cod].lado + '_C';
+      else if (cod === 'FX_MAIS_D' && e.D > 0) cod = 'FX_MENOS_D';
+      else if (cod === 'FX_MAIS_E' && e.E > 0) cod = 'FX_MENOS_E';
       const b = BY[cod];
       if (b.g === 'fx') { const e2 = clone(e); aplica(s, e2, b); if (e2[b.lado] === e[b.lado]) { toast('Não há faixa para fechar desse lado'); return; } }
       const p = Core.pos(s);                       // posição travada no toque
