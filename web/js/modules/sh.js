@@ -19,8 +19,8 @@
 (function () {
   const B = [
     // trecho (pausa / retomada do levantamento)
-    { g: 'trecho', cod: 'FIM_TRECHO', r: 'Levantamento pausado', l: 'Pausar' },
-    { g: 'trecho', cod: 'INI_TRECHO', r: 'Levantamento retomado', l: 'Retomar' },
+    { g: 'trecho', cod: 'INI_TRECHO', r: 'Início do trecho', l: 'Início do trecho' },
+    { g: 'trecho', cod: 'FIM_TRECHO', r: 'Fim do trecho', l: 'Fim do trecho' },
     // eixo — pista simples (amarelo, LFO)
     { g: 'eixo', cod: 'LFO-2', r: 'Eixo seccionado (LFO-2)', l: 'Seccionada', c: 'LFO-2' },
     { g: 'eixo', cod: 'LFO-1', r: 'Eixo contínuo simples (LFO-1)', l: 'Contínua', c: 'LFO-1' },
@@ -68,26 +68,36 @@
   const MATERIAIS = ['Tinta acrílica base solvente', 'Tinta base água', 'Termoplástico por aspersão', 'Termoplástico por extrusão', 'Termoplástico pré-formado', 'Plástico a frio', 'Não identificado'];
   const EST_BO = { C: 'contínuo', S: 'seccionado', A: 'ausente' };
 
-  const dupla = (s) => (s.params || {}).pista === 'Dupla';
-  const nBase = (s) => Math.max(1, Math.round((s.params || {}).faixas || 1));
+  // configuração do trecho atual (definida no "Início do trecho"); sessões antigas usam os parâmetros da sessão
+  const dupla = (s, e) => e ? !!e.dupla : (s.params || {}).pista === 'Dupla';
+  const nBase = (s, e) => Math.max(1, Math.round(e ? e.k : ((s.params || {}).faixas || 1)));
+  const BORDOS = { 'Ambos': ['C', 'C'], 'Só direito': ['A', 'C'], 'Só esquerdo': ['C', 'A'], 'Nenhum': ['A', 'A'] };
 
   // ── estado da pista ao longo do trecho ─────────────────────
   function estadoInicial(s) {
     const p = s.params || {};
-    // sessões antigas começavam com "Início do trecho" e sem eixo definido
-    const antigo = !p.v2;
-    return { ativo: antigo ? !s.eventos.some(e => e.cod === 'INI_TRECHO') : true,
-      eixo: dupla(s) ? null : (antigo ? null : (p.eixoIni || 'LFO-2')), div: p.divIni || 'LMS-1',
-      E: 0, D: 0, bo: { E: p.bordoLados === 'Só direito' ? 'A' : 'C', D: p.bordoLados === 'Só esquerdo' ? 'A' : 'C' }, zeb: false, tachas: false };
+    const dp = p.pista === 'Dupla', k = Math.max(1, Math.round(p.faixas || 1));
+    const bo = BORDOS[p.bordoLados] || BORDOS.Ambos;
+    const base = { dupla: dp, k, E: 0, D: 0, bo: { E: bo[0], D: bo[1] }, zeb: false, tachas: false, div: p.divIni || 'LMS-1' };
+    if (p.v3) return Object.assign(base, { ativo: false, eixo: null });           // atual: nada até o "Início do trecho"
+    if (p.v2) return Object.assign(base, { ativo: true, eixo: dp ? null : (p.eixoIni || 'LFO-2') });
+    return Object.assign(base, { ativo: !s.eventos.some(e => e.cod === 'INI_TRECHO'), eixo: null });   // versão 1
   }
   const clone = (e) => JSON.parse(JSON.stringify(e));
-  function aplica(s, e, b) {
-    if (b.g === 'trecho') e.ativo = b.cod === 'INI_TRECHO';
+  function aplica(s, e, b, ev) {
+    const cf = ev && ev.dados && ev.dados.pista;
+    if (b.cod === 'INI_TRECHO' && cf) {
+      // novo trecho: a configuração respondida no início substitui a anterior
+      const d = ev.dados, bo = BORDOS[d.bordos] || BORDOS.Ambos;
+      Object.assign(e, { ativo: true, dupla: d.pista === 'Dupla', k: Math.max(1, Math.round(d.faixas || 1)), E: 0, D: 0,
+        eixo: d.pista === 'Dupla' ? null : (d.eixo || 'LFO-2'), div: d.div || 'LMS-1', bo: { E: bo[0], D: bo[1] }, zeb: false, tachas: false });
+    }
+    else if (b.g === 'trecho') e.ativo = b.cod === 'INI_TRECHO';
     else if (b.g === 'eixo') e.eixo = b.cod;
     else if (b.g === 'div') e.div = b.cod;
     else if (b.g === 'fx' || b.g === 'fa') {
       e[b.lado] += b.delta; const t = faixas(s, e);
-      if (t.nr < 1 || t.nl < (dupla(s) ? 0 : 1)) e[b.lado] -= b.delta;   // não fecha a última faixa de um sentido
+      if (t.nr < 1 || t.nl < (e.dupla ? 0 : 1)) e[b.lado] -= b.delta;   // não fecha a última faixa de um sentido
     }
     else if (b.g === 'bo') e.bo[b.lado] = b.est;
     else if (b.g === 'bo2') { e.bo.E = b.est; e.bo.D = b.est; }
@@ -96,13 +106,13 @@
   }
   /** faixas à esquerda do eixo (contramão) e à direita; na pista dupla todas são do mesmo sentido */
   function faixas(s, e) {
-    const k = nBase(s);
+    const k = nBase(s, e);
     let nl, nr;
-    if (dupla(s)) { nl = Math.max(0, e.E); nr = k + e.D + Math.min(0, e.E); }
+    if (e.dupla) { nl = Math.max(0, e.E); nr = k + e.D + Math.min(0, e.E); }
     else { nl = k + e.E; nr = k + e.D; }
     return { nl, nr, total: nl + nr };
   }
-  function estado(s) { const e = estadoInicial(s); s.eventos.forEach(ev => { const b = BY[ev.cod]; if (b) aplica(s, e, b); }); return e; }
+  function estado(s) { const e = estadoInicial(s); s.eventos.forEach(ev => { const b = BY[ev.cod]; if (b) aplica(s, e, b, ev); }); return e; }
   function fimPos(s) { const o = s.fim ? s.offFim : Core.off(s); return Object.assign({ d: s.dist, off: o }, Core.posValues(s, o)); }
   function iniPos(s) { const d0 = Math.min(0, ...s.eventos.map(e => e.d)); return Object.assign({ d: d0, off: 0 }, Core.posValues(s, 0)); }
 
@@ -112,7 +122,7 @@
     s.eventos.forEach(ev => {
       const b = BY[ev.cod]; if (!b || b.g === 'pontual') return;
       if (ev.d > a.d) out.push({ d1: a.d, d2: ev.d, ini: a, fim: ev, st: clone(e) });
-      aplica(s, e, b); a = ev;
+      aplica(s, e, b, ev); a = ev;
     });
     const f = fimPos(s); if (f.d > a.d) out.push({ d1: a.d, d2: f.d, ini: a, fim: f, st: clone(e), aberto: true });
     return out;
@@ -123,7 +133,7 @@
     const n = t.nl + t.nr;
     L.push({ i: 0, tipo: 'bordo', lado: 'E', est: st.bo.E });
     for (let i = 1; i < n; i++) {
-      if (!dupla(s) && i === t.nl) L.push({ i, tipo: 'eixo', cod: st.eixo });
+      if (!st.dupla && i === t.nl) L.push({ i, tipo: 'eixo', cod: st.eixo });
       else L.push({ i, tipo: 'div', cod: st.div });
     }
     L.push({ i: n, tipo: 'bordo', lado: 'D', est: st.bo.D });
@@ -143,9 +153,9 @@
       });
       if (cur) segs.push(cur);
     };
-    if (!dupla(s)) junta('eixo', x => x.st.eixo, x => ({ cod: x.st.eixo }));
+    junta('eixo', x => x.st.dupla ? null : x.st.eixo, x => ({ cod: x.st.eixo }));
     junta('div', x => linhas(s, x.st).L.some(l => l.tipo === 'div') ? x.st.div : null, x => ({ cod: x.st.div, n: linhas(s, x.st).L.filter(l => l.tipo === 'div').length }));
-    junta('faixas', x => { const t = faixas(s, x.st); return t.total; }, x => ({ n: faixas(s, x.st).total }));
+    junta('faixas', x => faixas(s, x.st).total + (x.st.dupla ? 'd' : 's'), x => ({ n: faixas(s, x.st).total, base: x.st.dupla ? x.st.k : 2 * x.st.k, dupla: x.st.dupla }));
     ['E', 'D'].forEach(l => junta('bordo', x => x.st.bo[l] !== 'C' ? l + x.st.bo[l] : null, x => ({ lado: l, est: x.st.bo[l] })));
     junta('zeb', x => x.st.zeb ? 1 : null, () => ({}));
     junta('tachas', x => x.st.tachas ? 1 : null, () => ({}));
@@ -156,7 +166,7 @@
   function quantitativos(s) {
     const q = {}; const add = (nome, m, cor) => { q[nome] = q[nome] || { m: 0, cor }; q[nome].m += m; };
     intervalos(s).forEach(x => {
-      const len = Math.abs(x.d2 - x.d1); if (!x.st.ativo) { add('Trecho pausado (não levantado)', len); return; }
+      const len = Math.abs(x.d2 - x.d1); if (!x.st.ativo) { add('Fora de trecho (não levantado)', len); return; }
       const { t, L } = linhas(s, x.st);
       L.forEach(l => {
         if (l.tipo === 'bordo') add('Bordo ' + (l.lado === 'E' ? 'esquerdo' : 'direito') + ' ' + EST_BO[l.est], len);
@@ -183,18 +193,15 @@
     iconeEvento: () => '',
     camposAbertura(u) {
       u = u || {};
-      return `<div class="fsec">Pista no início do levantamento</div><div class="fgrid">
-          ${f('Pista', sel('sh-pista', ['Simples', 'Dupla'], u.pista || 'Simples'))}
-          ${f('Faixas por sentido', inp('sh-faixas', u.faixas || '1'))}
-          ${f('Eixo (pista simples)', sel('sh-eixo0', opEixo, u.eixoIni || 'LFO-2'))}
-          ${f('Divisão entre faixas', sel('sh-div0', opDiv, u.divIni || 'LMS-1'))}</div>
-        <p class="help">Pista dupla: levante um sentido por sessão, com o canteiro à esquerda. Os bordos já começam contínuos; só toque quando mudarem.</p>
+      return `<div class="fsec">Descrição geral da rodovia</div>
+        ${f('Descrição (opcional)', `<textarea class="inp" id="sh-desc" rows="2" placeholder="ex.: pista simples com 3ª faixa nas subidas, acostamento pavimentado">${esc(u.descricao || '')}</textarea>`)}
+        <p class="help">Tipo de pista, faixas e bordos são perguntados em cada <b>Início do trecho</b> — assim a mesma sessão pode ter trechos de pista dupla e simples.</p>
         <div class="fsec">Eixo</div><div class="fgrid">
           ${f('Largura (cm)', inp('sh-ex-l', u.eixoLarg, 'ex.: 10'))}${f('Cor', sel('sh-ex-c', ['Amarela', 'Branca'], u.eixoCor || 'Amarela'))}
           ${f('Traço (m)', inp('sh-ex-t', u.eixoTraco, 'ex.: 4'))}${f('Espaço (m)', inp('sh-ex-e', u.eixoEsp, 'ex.: 12'))}</div>
         <div class="fsec">Bordos</div><div class="fgrid">
           ${f('Largura (cm)', inp('sh-bo-l', u.bordoLarg, 'ex.: 10'))}${f('Cor', sel('sh-bo-c', ['Branca', 'Amarela'], u.bordoCor || 'Branca'))}
-          ${f('Lados pintados no início', sel('sh-bo-s', ['Ambos', 'Só direito', 'Só esquerdo'], u.bordoLados || 'Ambos'))}</div>
+</div>
         <div class="fsec">Divisão de faixas (mesmo sentido)</div><div class="fgrid">
           ${f('Largura (cm)', inp('sh-df-l', u.divLarg))}${f('Traço / espaço (m)', `<input class="inp" id="sh-df-c" value="${esc(u.divCad || '')}" placeholder="ex.: 4/12">`)}</div>
         <div class="fsec">Material e tachas</div>
@@ -208,9 +215,9 @@
     lerAbertura() {
       const n = (id) => { const v = num(id); return isNaN(v) ? null : v; };
       return {
-        v2: true, pista: val('sh-pista'), faixas: Math.max(1, Math.round(n('sh-faixas') || 1)), eixoIni: val('sh-eixo0'), divIni: val('sh-div0'),
+        v3: true, descricao: val('sh-desc').trim(),
         eixoLarg: n('sh-ex-l'), eixoCor: val('sh-ex-c'), eixoTraco: n('sh-ex-t'), eixoEsp: n('sh-ex-e'),
-        bordoLarg: n('sh-bo-l'), bordoCor: val('sh-bo-c'), bordoLados: val('sh-bo-s'),
+        bordoLarg: n('sh-bo-l'), bordoCor: val('sh-bo-c'),
         divLarg: n('sh-df-l'), divCad: val('sh-df-c').trim(),
         material: val('sh-mat'), tachas: val('sh-ta'), tachasEsp: n('sh-ta-e'), estado: val('sh-est'), croqui: parseInt(val('sh-cq')) || 500,
       };
@@ -223,19 +230,17 @@
         const b = BY[cod];
         return `<button class="sh-btn" id="shb-${cod}" data-cod="${cod}">${ICONS.get(cod)}<span>${esc(rot || b.l)}</span>${b.c ? `<small>${esc(b.c)}</small>` : ''}</button>`;
       };
-      const dp = s && dupla(s);
-      // na pista dupla não há eixo amarelo: os ícones mostram a divisão branca
-      const grp = (t, cods, c2) => `<div class="sh-grp"><div class="sh-grp-t">${t}</div><div class="sh-grid"${c2 ? ' style="grid-template-columns:1fr 1fr"' : ''}>${cods.map(c => dp ? btn(c).replace(/#F5C500/g, '#FFFFFF') : btn(c)).join('')}</div></div>`;
+      const grp = (t, cods, c2) => `<div class="sh-grp"><div class="sh-grp-t">${t}</div><div class="sh-grid"${c2 ? ' style="grid-template-columns:1fr 1fr"' : ''}>${cods.map(c => btn(c)).join('')}</div></div>`;
       return `<div class="card">
         <div class="sh-state" id="sh-state"></div>
+        <div class="sh-grp"><div class="sh-grid" style="grid-template-columns:1fr"><button class="sh-btn trecho" id="shb-TRECHO" data-cod="TRECHO">${ICONS.get('INI_TRECHO')}<span id="shb-TRECHO-t">▶ Início do trecho</span></button></div></div>
         <div class="sh-undo"><button class="btn-sm g" onclick="SH.desfazer()">↶ Desfazer último</button><button class="btn-sm n" onclick="SH.detalhe()">📷 Foto / obs. no último</button></div>
-        ${dp ? '' : grp('Eixo (amarelo)', ['LFO-2', 'LFO-1', 'LFO-3', 'LFO-4E', 'LFO-4D', 'LFO-5', 'SEM'])}
+        <div id="sh-g-eixo">${grp('Eixo (amarelo)', ['LFO-2', 'LFO-1', 'LFO-3', 'LFO-4E', 'LFO-4D', 'LFO-5', 'SEM'])}</div>
         ${grp('Divisão entre faixas do mesmo sentido (branco)', ['LMS-1', 'LMS-2', 'DIV_SEM'])}
         ${grp('Faixas · abre e fecha uma por toque', ['FX_MAIS_D', 'FX_MENOS_D', 'FX_MAIS_E', 'FX_MENOS_E'], 1)}
         ${grp('Bordos · toque liga, toque de novo volta ao contínuo', ['BOD_S', 'BOD_A', 'BOE_S', 'BOE_A'], 1)}
         ${grp('Zebrado e tachas · liga / desliga', ['ZEB_INI', 'TA_INI'], 1)}
         ${grp('Pontuais', ['FX_PED', 'LRE', 'DESG'])}
-        <div class="sh-grp"><div class="sh-grid" style="grid-template-columns:1fr"><button class="sh-btn fim" id="shb-PAUSA" data-cod="PAUSA">${ICONS.get('FIM_TRECHO')}<span id="shb-PAUSA-t">Pausar levantamento</span></button></div></div>
         <p class="help" style="text-align:center">Toque = registra na hora · toque longo = registra e abre foto e observação</p>
       </div>`;
     },
@@ -263,12 +268,16 @@
         else if (b.g === 'tachas') on = e.tachas;
         el.classList.toggle('on', !!on);
       });
-      const pz = $('shb-PAUSA'); if (pz) { pz.classList.toggle('fim', e.ativo); pz.classList.toggle('trecho', !e.ativo); $('shb-PAUSA-t').textContent = e.ativo ? 'Pausar levantamento' : '▶ Retomar levantamento'; }
+      const tb = $('shb-TRECHO');
+      if (tb) { tb.classList.toggle('trecho', !e.ativo); tb.classList.toggle('fim', e.ativo); $('shb-TRECHO-t').textContent = e.ativo ? '■ Fim do trecho' : '▶ Início do trecho'; }
+      if ($('sh-g-eixo')) $('sh-g-eixo').style.display = e.dupla ? 'none' : '';
+      // na pista dupla não há eixo amarelo: os ícones passam a mostrar a divisão branca
+      document.querySelectorAll('.sh-btn svg').forEach(sv => { if (!sv.dataset.orig) sv.dataset.orig = sv.innerHTML; sv.innerHTML = e.dupla ? sv.dataset.orig.replace(/#F5C500/g, '#FFFFFF') : sv.dataset.orig; });
       const bo = ['E', 'D'].filter(l => e.bo[l] !== 'C').map(l => `bordo ${l === 'E' ? 'esq.' : 'dir.'} <b>${EST_BO[e.bo[l]]}</b>`);
-      $('sh-state').innerHTML = (e.ativo ? '' : '<b style="color:#C62828">⏸ PAUSADO</b> · ')
-        + `<b>${dupla(s) ? 'Pista dupla' : 'Pista simples'}</b> · <b>${t.total} faixa${t.total > 1 ? 's' : ''}</b>`
-        + (dupla(s) ? '' : ` · Eixo: <b>${e.eixo ? BY[e.eixo].l : '—'}</b>`)
-        + (t.total - (dupla(s) ? 0 : 1) > 1 ? ` · Divisão: <b>${BY[e.div].l}</b>` : '')
+      if (!e.ativo) { $('sh-state').innerHTML = '<b style="color:#C62828">Fora de trecho</b> · toque em <b>▶ Início do trecho</b> para informar a pista e começar.'; return; }
+      $('sh-state').innerHTML = `<b>${e.dupla ? 'Pista dupla' : 'Pista simples'}</b> · <b>${t.total} faixa${t.total > 1 ? 's' : ''}</b>`
+        + (e.dupla ? '' : ` · Eixo: <b>${e.eixo ? BY[e.eixo].l : '—'}</b>`)
+        + (t.total - (e.dupla ? 0 : 1) > 1 ? ` · Divisão: <b>${BY[e.div].l}</b>` : '')
         + (bo.length ? ' · ' + bo.join(' · ') : ' · bordos contínuos')
         + (e.zeb ? ' · <b>zebrado</b>' : '') + (e.tachas ? ' · <b>tachas</b>' : '');
     },
@@ -278,11 +287,15 @@
       const p = s.params || {};
       const v = (x, u) => x == null || x === '' ? '—' : (typeof x === 'number' ? nf(x, x % 1 ? 2 : 0) : esc(x)) + (u || '');
       const params = `<h2>Parâmetros do levantamento</h2><table><tbody>
-        <tr><td><b>Pista</b></td><td>${v(p.pista)} · ${v(p.faixas)} faixa(s) por sentido</td><td><b>Material</b></td><td>${v(p.material)}</td></tr>
-        <tr><td><b>Eixo</b></td><td>${dupla(s) ? 'não há (pista dupla)' : v(p.eixoLarg, ' cm') + ' · ' + v(p.eixoCor) + ' · traço ' + v(p.eixoTraco, ' m') + ' / espaço ' + v(p.eixoEsp, ' m')}</td><td><b>Tachas</b></td><td>${v(p.tachas)}${p.tachasEsp ? ' · a cada ' + v(p.tachasEsp, ' m') : ''}</td></tr>
+        ${p.descricao ? `<tr><td><b>Rodovia</b></td><td colspan="3">${esc(p.descricao)}</td></tr>` : ''}
+        <tr><td><b>Pista</b></td><td>${p.v3 ? 'conforme cada trecho (abaixo)' : v(p.pista) + ' · ' + v(p.faixas) + ' faixa(s) por sentido'}</td><td><b>Material</b></td><td>${v(p.material)}</td></tr>
+        <tr><td><b>Eixo</b></td><td>${v(p.eixoLarg, ' cm')} · ${v(p.eixoCor)} · traço ${v(p.eixoTraco, ' m')} / espaço ${v(p.eixoEsp, ' m')}</td><td><b>Tachas</b></td><td>${v(p.tachas)}${p.tachasEsp ? ' · a cada ' + v(p.tachasEsp, ' m') : ''}</td></tr>
         <tr><td><b>Bordos</b></td><td>${v(p.bordoLarg, ' cm')} · ${v(p.bordoCor)}</td><td><b>Estado geral</b></td><td>${v(p.estado)}</td></tr>
         <tr><td><b>Divisão de faixas</b></td><td>${v(p.divLarg, ' cm')} · ${v(p.divCad)}</td><td><b>Referência</b></td><td>MBST Vol. IV (CONTRAN)</td></tr>
       </tbody></table>`;
+      const tini = s.eventos.filter(e => e.cod === 'INI_TRECHO' && e.dados && e.dados.pista);
+      const trechos = tini.length ? `<h2>Trechos levantados</h2><table><thead><tr><th>Início</th><th>Pista</th><th>Faixas por sentido</th><th>Bordos</th><th>Eixo / divisão no início</th></tr></thead><tbody>
+        ${tini.map(e => `<tr><td class="nw">${esc(Core.codigo(s, e) + ' · ' + posTxt(s, e))}</td><td>${esc(e.dados.pista)}</td><td>${e.dados.faixas}</td><td>${esc(e.dados.bordos)}</td><td>${esc(e.dados.pista === 'Dupla' ? BY[e.dados.div].r : BY[e.dados.eixo].r)}</td></tr>`).join('')}</tbody></table>` : '';
       const q = quantitativos(s);
       const quant = `<h2>Quantitativos (metros lineares de cada linha)</h2><table><thead><tr><th>Elemento</th><th class="r">Extensão (m)</th></tr></thead><tbody>
         ${Object.keys(q).map(k => `<tr><td>${q[k].cor ? `<span style="display:inline-block;width:10px;height:10px;background:${q[k].cor};margin-right:6px"></span>` : ''}${esc(k)}</td><td class="r">${nf(q[k].m, 1)}</td></tr>`).join('') || '<tr><td colspan="2" class="c">Sem extensão registrada.</td></tr>'}
@@ -292,7 +305,7 @@
       const segs = segmentos(s);
       const lista = `<h2>Trechos</h2><table><thead><tr><th>Elemento</th><th>Início</th><th>Fim</th><th class="r">Extensão (m)</th></tr></thead><tbody>
         ${segs.map(g => `<tr><td>${esc(nomeSeg(g))}</td><td class="nw">${esc(posTxt(s, g.ini))}</td><td class="nw">${esc(posTxt(s, g.fim))}${g.aberto ? ' (aberto)' : ''}</td><td class="r">${nf(g.len, 1)}</td></tr>`).join('') || '<tr><td colspan="4" class="c">—</td></tr>'}</tbody></table>`;
-      return params + quant + `<h2>Croqui linear</h2><div class="croqui">${croqui(s)}</div>` + lista + '<h2>Registros</h2>' + ctx.tabelaPadrao();
+      return params + trechos + quant + `<h2>Croqui linear</h2><div class="croqui">${croqui(s)}</div>` + lista + '<h2>Registros</h2>' + ctx.tabelaPadrao();
     },
 
     // ── KML ──────────────────────────────────────────────────
@@ -310,10 +323,9 @@
         const c = h.trechoTrack(s, g.d1, g.d2); if (!c) return '';
         return `<Placemark><name>${esc(nome)} · ${nf(g.len, 0)} m</name><description>${esc(posTxt(s, g.ini) + ' → ' + posTxt(s, g.fim))}</description><styleUrl>#${style}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${c}</coordinates></LineString></Placemark>`;
       };
-      const base = dupla(s) ? nBase(s) : 2 * nBase(s);
       return fold('Eixo', segs.filter(g => g.tipo === 'eixo').map(g => pm(g, BY[g.cod].r, 'sh-' + g.cod)))
         + fold('Divisão de faixas', segs.filter(g => g.tipo === 'div').map(g => pm(g, BY[g.cod].r + (g.n > 1 ? ' × ' + g.n : ''), 'sh-' + g.cod)))
-        + fold('Número de faixas', segs.filter(g => g.tipo === 'faixas' && g.n !== base).map(g => pm(g, g.n + ' faixas', 'sh-fa')))
+        + fold('Número de faixas', segs.filter(g => g.tipo === 'faixas' && g.n !== g.base).map(g => pm(g, g.n + ' faixas', 'sh-fa')))
         + fold('Bordos', segs.filter(g => g.tipo === 'bordo').map(g => pm(g, 'Bordo ' + (g.lado === 'E' ? 'esquerdo' : 'direito') + ' ' + EST_BO[g.est], 'sh-bordo' + g.est)))
         + fold('Zebrado', segs.filter(g => g.tipo === 'zeb').map(g => pm(g, 'Zebrado', 'sh-zeb')))
         + fold('Tachas', segs.filter(g => g.tipo === 'tachas').map(g => pm(g, 'Tachas', 'sh-tachas')));
@@ -346,7 +358,7 @@
         const x1 = xs(x.d1), x2 = xs(x.d2), w = x2 - x1; if (w <= 0) return;
         const { t, L } = linhas(s, x.st); const yTop = Yc - t.nl * LH, yBot = Yc + t.nr * LH;
         g.push(`<rect x="${x1}" y="${yTop}" width="${w}" height="${yBot - yTop}" fill="${x.st.ativo ? '#5A5F66' : '#B8BCC2'}"/>`);
-        if (!x.st.ativo) { if (w > 50) g.push(`<text x="${(x1 + x2) / 2}" y="${Yc + 4}" font-size="10" text-anchor="middle" fill="#333" font-family="Arial">pausado</text>`); return; }
+        if (!x.st.ativo) { if (w > 50) g.push(`<text x="${(x1 + x2) / 2}" y="${Yc + 4}" font-size="10" text-anchor="middle" fill="#333" font-family="Arial">fora de trecho</text>`); return; }
         L.forEach(l => {
           const y = yTop + l.i * LH;
           const ln = (yy, cor, d, sw) => `<line x1="${x1}" y1="${yy}" x2="${x2}" y2="${yy}" stroke="${cor}" stroke-width="${sw || 2}" ${d || ''}/>`;
@@ -365,8 +377,8 @@
             else g.push(ln(y, '#8A9099', 'stroke-dasharray="1 4"', 1));
           }
         });
-        if (x.st.zeb) { const yz = dupla(s) ? yTop + 2 : Yc - 6; g.push(`<rect x="${x1}" y="${yz}" width="${w}" height="12" fill="none" stroke="#F5C500" stroke-width="1.3"/>`); for (let xx = x1 + 4; xx < x2 - 4; xx += 8) g.push(`<line x1="${xx}" y1="${yz + 12}" x2="${xx + 6}" y2="${yz}" stroke="#F5C500" stroke-width="1"/>`); }
-        if (x.st.tachas) for (let xx = x1; xx <= x2; xx += 10) g.push(`<circle cx="${xx}" cy="${Yc + (dupla(s) ? LH : 0)}" r="1.7" fill="#FF5252"/>`);
+        if (x.st.zeb) { const yz = x.st.dupla ? yTop + 2 : Yc - 6; g.push(`<rect x="${x1}" y="${yz}" width="${w}" height="12" fill="none" stroke="#F5C500" stroke-width="1.3"/>`); for (let xx = x1 + 4; xx < x2 - 4; xx += 8) g.push(`<line x1="${xx}" y1="${yz + 12}" x2="${xx + 6}" y2="${yz}" stroke="#F5C500" stroke-width="1"/>`); }
+        if (x.st.tachas) for (let xx = x1; xx <= x2; xx += 10) g.push(`<circle cx="${xx}" cy="${Yc + (x.st.dupla ? LH : 0)}" r="1.7" fill="#FF5252"/>`);
         const ei = L.find(l => l.tipo === 'eixo');
         if (w > 60) g.push(`<text x="${(x1 + x2) / 2}" y="${yTop - 4}" font-size="9" text-anchor="middle" fill="#555" font-family="Arial">${t.total} fx${ei && ei.cod ? ' · ' + esc(BY[ei.cod].c || BY[ei.cod].l) : ''}</text>`);
       });
@@ -391,8 +403,9 @@
     toque(cod, longo) {
       const s = Core.S(); if (!s) return;
       const e = estado(s);
+      if (cod === 'TRECHO') { if (!e.ativo) { SH.iniciar(); return; } cod = 'FIM_TRECHO'; }
+      if (!e.ativo && !['FX_PED', 'LRE', 'DESG'].includes(cod)) { toast('Toque primeiro em ▶ Início do trecho'); return; }
       // botões liga/desliga: o segundo toque registra a volta ao normal
-      if (cod === 'PAUSA') cod = e.ativo ? 'FIM_TRECHO' : 'INI_TRECHO';
       else if (cod === 'ZEB_INI' && e.zeb) cod = 'ZEB_FIM';
       else if (cod === 'TA_INI' && e.tachas) cod = 'TA_FIM';
       else if (BY[cod] && BY[cod].g === 'bo' && e.bo[BY[cod].lado] === BY[cod].est) cod = 'BO' + BY[cod].lado + '_C';
@@ -402,10 +415,42 @@
       const ev = Core.addEvent({ grupo: b.g, cod, rotulo: b.r }, p);
       ultimoId = ev.id;
       buzz(b.g === 'trecho' ? [60, 40, 60] : 40); beep(b.g === 'trecho' ? 900 : 1300);
-      const el = $('shb-' + (b.g === 'trecho' ? 'PAUSA' : cod)); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+      const el = $('shb-' + (b.g === 'trecho' ? 'TRECHO' : cod)); if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
       const t = b.g === 'fx' ? ' → ' + faixas(s, estado(s)).total + ' faixas' : '';
       toast(Core.codigo(s, ev) + ' · ' + b.r + t + ' · ' + posTxt(s, ev));
       if (longo) SH.detalhe(ev.id);
+    },
+    /** Início do trecho: trava a posição no toque e pergunta como é a pista */
+    iniciar() {
+      const s = Core.S(); if (!s) return;
+      const pos = Core.pos(s); SH._posIni = pos;
+      const ult = s.eventos.filter(e => e.cod === 'INI_TRECHO' && e.dados && e.dados.pista).pop();
+      const d = ult ? ult.dados : { pista: 'Simples', faixas: 1, bordos: 'Ambos', eixo: 'LFO-2', div: 'LMS-1' };
+      const chips = (id, ops, v) => `<div class="chips" id="${id}">${ops.map(o => `<button type="button" class="chip ${String(o) === String(v) ? 'sel' : ''}" data-v="${o}" onclick="this.parentNode.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));this.classList.add('sel');SH._ajIni()">${o}</button>`).join('')}</div>`;
+      UI.modal('▶ Início do trecho', `<div class="preview-fmt" style="margin-bottom:10px">${esc(posTxt(s, pos))}</div>
+        ${f('Pista', chips('si-pista', ['Simples', 'Dupla'], d.pista))}
+        ${f('Faixas por sentido', chips('si-fx', [1, 2, 3, 4], d.faixas))}
+        ${f('Bordos pintados', chips('si-bo', ['Ambos', 'Só direito', 'Só esquerdo', 'Nenhum'], d.bordos))}
+        <div id="si-eixo-w">${f('Eixo (amarelo)', sel('si-eixo', opEixo, d.eixo || 'LFO-2'))}</div>
+        <div id="si-div-w">${f('Divisão entre faixas do mesmo sentido', sel('si-div', opDiv, d.div || 'LMS-1'))}</div>
+        <p class="help" id="si-help"></p>
+        <button class="btn-full" onclick="SH.confirmarIni()">✓ Confirmar e começar</button>`);
+      SH._ajIni();
+    },
+    _ajIni() {
+      const g = (id) => { const c = document.querySelector('#' + id + ' .chip.sel'); return c ? c.dataset.v : null; };
+      const dp = g('si-pista') === 'Dupla', fx = +g('si-fx');
+      $('si-eixo-w').style.display = dp ? 'none' : '';
+      $('si-div-w').style.display = dp ? (fx > 1 ? '' : 'none') : (fx > 1 ? '' : 'none');
+      $('si-help').textContent = dp ? 'Pista dupla: levante um sentido, com o canteiro à esquerda. Sem eixo amarelo; linhas entre faixas brancas.' : 'Pista simples: eixo amarelo no centro, ' + fx + ' faixa(s) em cada sentido.';
+    },
+    confirmarIni() {
+      const s = Core.S(); if (!s) return;
+      const g = (id) => document.querySelector('#' + id + ' .chip.sel').dataset.v;
+      const dados = { pista: g('si-pista'), faixas: +g('si-fx'), bordos: g('si-bo'), eixo: val('si-eixo'), div: val('si-div') };
+      const ev = Core.addEvent({ grupo: 'trecho', cod: 'INI_TRECHO', rotulo: 'Início do trecho · pista ' + dados.pista.toLowerCase() + ', ' + dados.faixas + ' faixa(s) por sentido', dados }, SH._posIni || Core.pos(s));
+      ultimoId = ev.id; UI.closeModal(); buzz([60, 40, 60]); beep(900);
+      toast(Core.codigo(s, ev) + ' · Início do trecho · ' + posTxt(s, ev));
     },
     desfazer() {
       const ev = Core.undoLast(); if (ev) { toast('↶ Desfeito: ' + ev.rotulo); beep(500, 0.12); }
