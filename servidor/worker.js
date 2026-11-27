@@ -19,12 +19,14 @@ const json = (o, st) => new Response(JSON.stringify(o), { status: st || 200, hea
 const b64u = (s) => { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return s; };
 const bytes = (s) => Uint8Array.from(atob(b64u(s)), c => c.charCodeAt(0));
 
+// chaves canceladas (começo da assinatura)
+const REVOGADAS = ['ddqgEl7xU6NxE07gOrRAivZR'];
 async function licenca(raw, modulo) {
   const p = String(raw || '').replace(/\s+/g, '').split('.');
   if (p.length !== 3 || p[0] !== 'DVAR1') return null;
   const key = await crypto.subtle.importKey('jwk', PUB, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
   const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, bytes(p[2]), new TextEncoder().encode(p[0] + '.' + p[1]));
-  if (!ok) return null;
+  if (!ok || REVOGADAS.some(r => p[2].startsWith(r))) return null;
   const d = JSON.parse(decodeURIComponent(escape(atob(b64u(p[1])))));
   if (d.v && d.v < new Date().toISOString().slice(0, 10)) return null;
   if (modulo && !(d.m || []).some(m => m === '*' || m === modulo)) return null;

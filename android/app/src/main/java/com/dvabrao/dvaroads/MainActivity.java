@@ -306,6 +306,29 @@ public class MainActivity extends Activity {
                 }
                 fileChooserCallback = filePathCallback;
 
+                // Arquivos que não são imagem (DXF, WMF, SVG...): seletor de arquivos geral, sem câmera
+                boolean soImagem = false;
+                String[] tipos = fileChooserParams.getAcceptTypes();
+                if (tipos != null && tipos.length > 0) {
+                    soImagem = true;
+                    for (String t : tipos) {
+                        if (t == null || !t.trim().startsWith("image/") || t.trim().equals("image/svg+xml")) { soImagem = false; break; }
+                    }
+                }
+                if (!soImagem && !fileChooserParams.isCaptureEnabled()) {
+                    cameraOutputUri = null;
+                    Intent doc = new Intent(Intent.ACTION_GET_CONTENT);
+                    doc.addCategory(Intent.CATEGORY_OPENABLE);
+                    doc.setType("*/*");
+                    try {
+                        startActivityForResult(Intent.createChooser(doc, "Abrir arquivo"), REQ_FILE_CHOOSER);
+                    } catch (Exception e) {
+                        fileChooserCallback = null;
+                        return false;
+                    }
+                    return true;
+                }
+
                 // Cria arquivo temporário para a câmera salvar a foto em resolução completa
                 try {
                     java.io.File photoDir = new java.io.File(getCacheDir(), "share");

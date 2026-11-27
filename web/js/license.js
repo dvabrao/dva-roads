@@ -8,6 +8,8 @@
 const License = (function () {
   const PUB = { kty: 'EC', crv: 'P-256', x: 'kvyvNzzQgU2JkaglthbI_WrM1q2eYGW1BFvl25mWbEA', y: '2fvhpRcQTeLAPENlOgBaIAW-PPzSxkk3Rh0x3h1vY_w' };
   const KEY = 'dvaroads_licencas';
+  // chaves canceladas (começo da assinatura): deixam de valer no app e no servidor
+  const REVOGADAS = ['ddqgEl7xU6NxE07gOrRAivZR'];
   let lic = [];            // chaves válidas: [{raw, c, m, v, e}]
   let _pub = null;
 
@@ -27,6 +29,7 @@ const License = (function () {
     if (!window.crypto || !crypto.subtle) throw new Error('Este aparelho não consegue conferir chaves.');
     const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, await pub(), bytes(p[2]), new TextEncoder().encode(p[0] + '.' + p[1]));
     if (!ok) throw new Error('Chave não reconhecida. Confira se foi copiada inteira.');
+    if (REVOGADAS.some(r => p[2].startsWith(r))) throw new Error('Esta chave foi cancelada. Peça uma nova chave.');
     const d = JSON.parse(decodeURIComponent(escape(atob(b64u(p[1])))));
     return Object.assign({ raw }, d);
   }
