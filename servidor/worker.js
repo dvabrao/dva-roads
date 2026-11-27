@@ -21,16 +21,39 @@ const bytes = (s) => Uint8Array.from(atob(b64u(s)), c => c.charCodeAt(0));
 
 // chaves canceladas (começo da assinatura)
 const REVOGADAS = ['ddqgEl7xU6NxE07gOrRAivZR'];
-async function licenca(raw, modulo) {
+// chaves emitidas pelo painel são assinadas pela chave do servidor (gerada e guardada no banco); o app confia nas duas públicas
+let PUB2 = null;
+async function pubServidor(env) {
+  if (PUB2) return PUB2;
+  try { const r = env && env.DB ? await env.DB.prepare("SELECT v FROM config WHERE k='lic_pub'").first() : null; PUB2 = r ? JSON.parse(r.v) : null; } catch (e) { return false; }
+  return PUB2 || false;
+}
+async function confere(pub, sig, corpo) {
+  const key = await crypto.subtle.importKey('jwk', pub, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  return crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, corpo);
+}
+async function licenca(raw, modulo, env) {
   const p = String(raw || '').replace(/\s+/g, '').split('.');
   if (p.length !== 3 || p[0] !== 'DVAR1') return null;
-  const key = await crypto.subtle.importKey('jwk', PUB, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-  const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, bytes(p[2]), new TextEncoder().encode(p[0] + '.' + p[1]));
+  const sig = bytes(p[2]), corpo = new TextEncoder().encode(p[0] + '.' + p[1]);
+  let ok = await confere(PUB, sig, corpo);
+  if (!ok) { const p2 = await pubServidor(env); if (p2) ok = await confere(p2, sig, corpo); }
   if (!ok || REVOGADAS.some(r => p[2].startsWith(r))) return null;
   const d = JSON.parse(decodeURIComponent(escape(atob(b64u(p[1])))));
   if (d.v && d.v < new Date().toISOString().slice(0, 10)) return null;
   if (modulo && !(d.m || []).some(m => m === '*' || m === modulo)) return null;
   d.admin = /\(administrador\)/i.test(d.c || '');
+  d.assin = p[2].slice(0, 24);
+  // cadastro automático de toda chave usada + bloqueio das canceladas no painel
+  if (env && env.DB) {
+    try {
+      await esquema(env.DB);
+      await env.DB.prepare(`INSERT INTO chaves (assin,cliente,usuario,gestor,modulos,validade,emitida,chave,criado,ultimo,revogada,obs) VALUES (?,?,?,?,?,?,?,?,?,?,0,'')
+        ON CONFLICT(assin) DO UPDATE SET ultimo=excluded.ultimo`).bind(d.assin, d.c || '', d.u || '', d.g ? 1 : 0, (d.m || []).join(','), d.v || '', d.e || '', p.join('.'), Date.now(), Date.now()).run();
+      const r = await env.DB.prepare('SELECT revogada FROM chaves WHERE assin=?').bind(d.assin).first();
+      if (r && r.revogada) return null;
+    } catch (e) { /* banco fora: não bloqueia o uso */ }
+  }
   return d;
 }
 
@@ -151,6 +174,8 @@ async function esquema(db) {
     db.prepare(`CREATE TABLE IF NOT EXISTS fotos (cliente TEXT NOT NULL, sessao TEXT NOT NULL, nome TEXT NOT NULL, img BLOB,
       PRIMARY KEY (cliente, sessao, nome))`),
     db.prepare(`CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS chaves (assin TEXT PRIMARY KEY, cliente TEXT, usuario TEXT, gestor INTEGER, modulos TEXT, validade TEXT,
+      emitida TEXT, chave TEXT, criado INTEGER, ultimo INTEGER, revogada INTEGER, obs TEXT)`),
   ]);
   // colunas novas (bancos antigos): usuário que levantou e controle da cópia no Drive
   for (const q of ['ALTER TABLE sessoes ADD COLUMN usuario TEXT', 'ALTER TABLE sessoes ADD COLUMN drive INTEGER', 'ALTER TABLE fotos ADD COLUMN drive TEXT']) {
@@ -162,7 +187,7 @@ const semDB = () => json({ erro: 'Banco de dados do servidor ainda não configur
 
 async function nuvemSessao(env, b, ctx) {
   const s = b.sessao || {};
-  const lic = await licenca(b.chave, s.modulo); if (!lic) return json({ erro: 'Licença inválida ou vencida para este módulo.' }, 403);
+  const lic = await licenca(b.chave, s.modulo, env); if (!lic) return json({ erro: 'Licença inválida ou vencida para este módulo.' }, 403);
   if (!s.id) return json({ erro: 'Sessão sem identificação.' }, 400);
   const eventos = JSON.stringify(s.eventos || []), trajeto = JSON.stringify(s.trajeto || []);
   if (eventos.length + trajeto.length > 1_800_000) return json({ erro: 'Sessão grande demais para enviar de uma vez.' }, 413);
@@ -185,7 +210,7 @@ async function nuvemSessao(env, b, ctx) {
   return json({ ok: true, cliente: lic.c, faltam: todas.filter(f => !tem.has(f)) });
 }
 async function nuvemFoto(env, b, ctx) {
-  const lic = await licenca(b.chave, b.modulo); if (!lic) return json({ erro: 'Licença inválida.' }, 403);
+  const lic = await licenca(b.chave, b.modulo, env); if (!lic) return json({ erro: 'Licença inválida.' }, 403);
   if (!b.b64 || b.b64.length > 1_500_000) return json({ erro: 'Foto inválida ou grande demais.' }, 413);
   const bin = Uint8Array.from(atob(b.b64), c => c.charCodeAt(0));
   await env.DB.prepare('INSERT INTO fotos (cliente,sessao,nome,img) VALUES (?,?,?,?) ON CONFLICT(cliente,sessao,nome) DO UPDATE SET img=excluded.img')
@@ -377,15 +402,77 @@ async function driveRetorno(env, url) {
   return pg(`Conectado${conta ? ' à conta <b>' + conta.replace(/[<>&"]/g, '') + '</b>' : ''}. No painel, toque em <b>Copiar tudo para o Drive</b> para levar o que já foi enviado. Os próximos envios do app serão copiados sozinhos.`, true);
 }
 
+// ── usuários e chaves de acesso (painel do administrador) ─────────
+const b64uEnc = (u8) => btoa(String.fromCharCode(...u8)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const MODULOS = ['marcozero', 'slir', 'sh', 'sv', 'dg'];
+async function chavePrivada(env) {
+  const r = await env.DB.prepare("SELECT v FROM config WHERE k='lic_priv'").first();
+  if (r) return JSON.parse(r.v);
+  const par = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const priv = await crypto.subtle.exportKey('jwk', par.privateKey), pub = await crypto.subtle.exportKey('jwk', par.publicKey);
+  await cfgSet(env, 'lic_priv', JSON.stringify(priv));
+  await cfgSet(env, 'lic_pub', JSON.stringify({ kty: 'EC', crv: 'P-256', x: pub.x, y: pub.y }));
+  PUB2 = null;
+  return priv;
+}
+async function assinaChave(env, dados) {
+  const priv = await chavePrivada(env);
+  const key = await crypto.subtle.importKey('jwk', priv, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const corpo = 'DVAR1.' + b64uEnc(new TextEncoder().encode(JSON.stringify(dados)));
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(corpo)));
+  return corpo + '.' + b64uEnc(sig);
+}
+async function apiChaves(env, rota, b, lic) {
+  if (rota === 'chaves-lista') {
+    await chavePrivada(env);   // cria a chave de assinatura do servidor na primeira vez
+    const r = await env.DB.prepare('SELECT assin,cliente,usuario,gestor,modulos,validade,emitida,chave,criado,ultimo,revogada,obs FROM chaves ORDER BY cliente, usuario').all();
+    const c = await env.DB.prepare("SELECT DISTINCT cliente FROM sessoes").all();
+    return json({ chaves: r.results || [], clientes: [...new Set([...(r.results || []).map(x => x.cliente), ...(c.results || []).map(x => x.cliente)])].filter(Boolean).sort(),
+      minha: lic.assin, servidorPronto: !!(await pubServidor(env)) });
+  }
+  if (rota === 'chaves-criar') {
+    let cliente = String(b.cliente || '').trim().slice(0, 80), usuario = String(b.usuario || '').trim().slice(0, 60);
+    const validade = String(b.validade || ''), admin = !!b.administrador;
+    if (!cliente) return json({ erro: 'Informe o cliente.' }, 400);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(validade) || validade < new Date().toISOString().slice(0, 10)) return json({ erro: 'Validade inválida.' }, 400);
+    cliente = cliente.replace(/\s*\(administrador\)\s*/ig, ' ').trim();
+    const m = admin ? ['*'] : (b.modulos || []).filter(x => MODULOS.includes(x));
+    if (!m.length) return json({ erro: 'Escolha ao menos um módulo.' }, 400);
+    const dados = { c: admin ? cliente + ' (administrador)' : cliente, m, v: validade, e: new Date().toISOString().slice(0, 10) };
+    if (usuario) dados.u = usuario;
+    if (b.gestor || admin) dados.g = 1;
+    const chave = await assinaChave(env, dados), assin = chave.split('.')[2].slice(0, 24);
+    await env.DB.prepare(`INSERT OR REPLACE INTO chaves (assin,cliente,usuario,gestor,modulos,validade,emitida,chave,criado,ultimo,revogada,obs) VALUES (?,?,?,?,?,?,?,?,?,NULL,0,?)`)
+      .bind(assin, dados.c, usuario, dados.g ? 1 : 0, m.join(','), validade, dados.e, chave, Date.now(), String(b.obs || '').slice(0, 200)).run();
+    return json({ ok: true, chave, assin });
+  }
+  if (rota === 'chaves-revogar' || rota === 'chaves-reativar') {
+    if (rota === 'chaves-revogar' && b.assin === lic.assin) return json({ erro: 'Você não pode cancelar a chave que está usando agora.' }, 400);
+    await env.DB.prepare('UPDATE chaves SET revogada=? WHERE assin=?').bind(rota === 'chaves-revogar' ? Date.now() : 0, String(b.assin || '')).run();
+    return json({ ok: true });
+  }
+  if (rota === 'chaves-obs') {
+    await env.DB.prepare('UPDATE chaves SET obs=? WHERE assin=?').bind(String(b.obs || '').slice(0, 200), String(b.assin || '')).run();
+    return json({ ok: true });
+  }
+  if (rota === 'chaves-excluir') {
+    if (b.assin === lic.assin) return json({ erro: 'Esta é a sua chave atual.' }, 400);
+    await env.DB.prepare('DELETE FROM chaves WHERE assin=? AND revogada>0').bind(String(b.assin || '')).run();
+    return json({ ok: true });
+  }
+  return json({ erro: 'Rota não encontrada.' }, 404);
+}
+
 // painel: o administrador vê todos os clientes; os demais só os próprios dados
 // chave com "usuário" (técnico) e sem "gestor": vê só o que ele mesmo levantou
 const soDele = (lic) => !lic.admin && !!lic.u && !lic.g;
 async function api(env, rota, b, url) {
-  const lic = await licenca(b.chave); if (!lic) return json({ erro: 'Chave inválida ou vencida.' }, 403);
+  const lic = await licenca(b.chave, null, env); if (!lic) return json({ erro: 'Chave inválida ou vencida.' }, 403);
   const cli = lic.admin ? (b.cliente || null) : lic.c;
   const filtro = (pref) => { const w = [], v = []; if (cli) { w.push(pref + 'cliente=?'); v.push(cli); } if (soDele(lic)) { w.push(pref + 'usuario=?'); v.push(lic.u); } return { w, v }; };
   if (rota === 'login') return json({ cliente: lic.c, usuario: lic.u || '', gestor: !!lic.g, admin: lic.admin, modulos: lic.m, validade: lic.v });
   if (rota.startsWith('drive-')) return lic.admin ? apiDrive(env, rota, b, url) : json({ erro: 'Só o administrador.' }, 403);
+  if (rota.startsWith('chaves-')) return lic.admin ? apiChaves(env, rota, b, lic) : json({ erro: 'Só o administrador.' }, 403);
   if (rota === 'sessoes') {
     const f = filtro('');
     const q = `SELECT cliente,id,modulo,nome,rodovia,tipo,orgao,ini,fim,atualizado,nitens,usuario FROM sessoes ${f.w.length ? 'WHERE ' + f.w.join(' AND ') : ''} ORDER BY ini DESC`;
@@ -434,6 +521,12 @@ export default {
         return await api(env, url.pathname.slice(5), b, url);
       } catch (e) { return json({ erro: 'Erro no servidor: ' + e.message }, 500); }
     }
+    if (url.pathname === '/licenca/status' && req.method === 'POST') {
+      let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }
+      const lic = await licenca(b.chave, null, env);
+      return json({ valida: !!lic });
+    }
+    if (url.pathname === '/licenca/pub') return json({ pub: env.DB ? await pubServidor(env) : null });
     if (url.pathname === '/drive/retorno') {
       if (!env.DB) return semDB();
       await esquema(env.DB);
@@ -441,7 +534,7 @@ export default {
     }
     if (url.pathname === '/ia/verificar' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }
-      if (!(await licenca(b.chave, b.modulo))) return json({ erro: 'Licença inválida ou vencida para este módulo.' }, 403);
+      if (!(await licenca(b.chave, b.modulo, env))) return json({ erro: 'Licença inválida ou vencida para este módulo.' }, 403);
       if (b.imagem && b.imagem.length > 4_000_000) return json({ erro: 'Foto grande demais.' }, 413);
       try {
         const prov = (env.PROVEDOR || 'gemini').toLowerCase();
@@ -451,7 +544,7 @@ export default {
     }
     if (url.pathname === '/ia/diagramar' && req.method === 'POST') {
       let b; try { b = await req.json(); } catch (e) { return json({ erro: 'Pedido inválido.' }, 400); }
-      if (!(await licenca(b.chave, 'dg'))) return json({ erro: 'Licença inválida ou vencida para a Diagramação.' }, 403);
+      if (!(await licenca(b.chave, 'dg', env))) return json({ erro: 'Licença inválida ou vencida para a Diagramação.' }, 403);
       if (!b.imagem || b.imagem.length > 4_000_000) return json({ erro: 'Foto ausente ou grande demais.' }, 413);
       b._prompt = promptDiagramar(b);
       try {

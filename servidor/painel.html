@@ -10,7 +10,11 @@
 *{box-sizing:border-box}body{margin:0;font-family:'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--t);font-size:14px}
 header{background:var(--navy);color:#fff;padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{margin:0;font-size:18px;letter-spacing:.5px}header h1 b{color:var(--y)}header .cli{font-size:12px;opacity:.8}
-header .sp{flex:1}header button{background:transparent;color:#fff;border:1px solid #ffffff55;border-radius:8px;padding:6px 12px;cursor:pointer}
+header .sp{flex:1}header button{background:transparent;color:#fff;border:1px solid #ffffff55;border-radius:8px;padding:6px 12px;cursor:pointer}header button.on{background:var(--y);color:var(--navy);border-color:var(--y);font-weight:700}
+#dgw{display:none;position:fixed;left:0;right:0;bottom:0;top:var(--hh,56px);background:#fff}#dgw iframe{width:100%;height:100%;border:0}
+.ck{display:flex;flex-wrap:wrap;gap:8px}.ck label{display:flex;gap:6px;align-items:center;border:1px solid var(--b);border-radius:9px;padding:6px 10px;cursor:pointer;font-size:13px}.ck input{width:auto}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;background:#E9EEF5}.tag.r{background:#FDE2E2;color:#B71C1C}.tag.ok{background:#E3F4E5;color:#1B5E20}.tag.a{background:#FFF3C4;color:#7A5B00}
+.chv{font-family:monospace;font-size:12px;word-break:break-all;background:#F7F9FC;border:1px solid var(--b);border-radius:9px;padding:10px}
 main{max-width:1400px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--b);border-radius:14px;padding:14px;margin-bottom:14px}
 .lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--sub);margin-bottom:4px}
@@ -40,7 +44,14 @@ td{padding:7px 8px;border-bottom:1px solid #EEF1F5;vertical-align:middle}tr:hove
 </style>
 </head>
 <body>
-<header><h1>DVA <b>ROADS</b> · Painel</h1><span class="cli" id="h-cli"></span><span class="sp"></span><button onclick="window.open('https://dvabrao.github.io/dva-roads/placas.html','_blank')">📐 DVA Placas</button><button id="b-sair" style="display:none" onclick="sair()">Sair</button></header>
+<header><h1>DVA <b>ROADS</b> · Painel</h1><span class="cli" id="h-cli"></span><span class="sp"></span>
+  <nav id="nav" style="display:none" class="row">
+    <button data-t="inv" class="on" onclick="aba('inv')">📋 Inventário</button>
+    <button data-t="dg" onclick="aba('dg')">📐 DVA Placas</button>
+    <button data-t="us" id="b-us" style="display:none" onclick="aba('us')">👥 Usuários e chaves</button>
+    <button onclick="window.open('https://github.com/dvabrao/dva-roads/releases/latest','_blank')">📱 Baixar app</button>
+  </nav>
+  <button id="b-sair" style="display:none" onclick="sair()">Sair</button></header>
 <main>
 <div id="login" class="card">
   <div class="lbl">Chave de acesso</div>
@@ -51,9 +62,6 @@ td{padding:7px 8px;border-bottom:1px solid #EEF1F5;vertical-align:middle}tr:hove
 </div>
 
 <div id="app" style="display:none">
-  <div class="card" id="dv" style="display:none">
-    <div class="row"><div class="lbl" style="margin:0">☁️ Cópia no Google Drive</div><span class="muted" id="dv-st">verificando…</span><span style="flex:1"></span><span id="dv-bt" class="row"></span></div>
-  </div>
   <div class="card">
     <div class="filtros">
       <div id="f-cli-w" style="display:none"><div class="lbl">Cliente</div><select id="f-cli" onchange="filtraSessoes()"></select></div>
@@ -85,7 +93,36 @@ td{padding:7px 8px;border-bottom:1px solid #EEF1F5;vertical-align:middle}tr:hove
     </div>
   </div>
 </div>
+<div id="usw" style="display:none">
+  <div class="card">
+    <div class="lbl">Nova chave de acesso</div>
+    <div class="filtros" style="margin-top:8px">
+      <div><div class="lbl">Cliente / empresa</div><input id="n-cli" list="l-cli" placeholder="ex.: DER, Entrevias"><datalist id="l-cli"></datalist></div>
+      <div><div class="lbl">Usuário / técnico</div><input id="n-usu" placeholder="ex.: Júlio (vazio = cliente inteiro)"></div>
+      <div><div class="lbl">Validade</div><input id="n-val" type="date"></div>
+      <div><div class="lbl">Observação</div><input id="n-obs" placeholder="telefone, contrato..."></div>
+    </div>
+    <div class="lbl" style="margin-top:12px">Módulos liberados</div>
+    <div class="ck" id="n-mods"></div>
+    <div class="ck" style="margin-top:10px">
+      <label><input type="checkbox" id="n-ges"> Gestor (vê no painel o trabalho de todos os técnicos do cliente)</label>
+      <label><input type="checkbox" id="n-adm" onchange="$('n-mods').style.opacity=this.checked?.4:1"> Administrador (vê e controla tudo)</label>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn y" onclick="criarChave()">🔑 Criar chave</button><span class="muted" id="n-msg"></span></div>
+    <div id="n-res"></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin-bottom:8px"><div class="lbl" style="margin:0">Chaves</div><span class="muted" id="c-cont"></span><span style="flex:1"></span>
+      <input id="c-busca" placeholder="buscar…" style="max-width:220px" oninput="listaChaves()"></div>
+    <div class="tw"><table><thead><tr><th>Cliente</th><th>Usuário</th><th>Tipo</th><th>Módulos</th><th>Validade</th><th>Último uso</th><th>Situação</th><th></th></tr></thead><tbody id="c-tb"></tbody></table></div>
+    <p class="muted" style="margin-top:8px">Toda chave usada no app ou no painel aparece aqui automaticamente. Chave cancelada para de funcionar no painel, no envio de dados e na IA na hora, e é removida do celular na próxima vez que ele abrir o app com internet.</p>
+  </div>
+  <div class="card" id="dv">
+    <div class="row"><div class="lbl" style="margin:0">☁️ Cópia no Google Drive</div><span class="muted" id="dv-st">verificando…</span><span style="flex:1"></span><span id="dv-bt" class="row"></span></div>
+  </div>
+</div>
 </main>
+<div id="dgw"></div>
 <div class="modal" id="modal" onclick="if(event.target===this)this.style.display='none'"><div class="box" id="mbox"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -110,10 +147,11 @@ async function entrar() {
   $('l-msg').textContent = 'Verificando…';
   try { info = await post('login'); } catch (e) { $('l-msg').textContent = '⚠️ ' + e.message; return; }
   try { localStorage.setItem('dvar_chave', chave); } catch (e) {}
-  $('login').style.display = 'none'; $('app').style.display = 'block'; $('b-sair').style.display = '';
+  $('login').style.display = 'none'; $('app').style.display = 'block'; $('b-sair').style.display = ''; $('nav').style.display = 'flex';
+  if (info.admin) $('b-us').style.display = '';
   $('h-cli').textContent = info.cliente + (info.usuario ? ' · ' + info.usuario + (info.gestor ? ' (gestor)' : '') : '') + (info.validade ? ' · licença até ' + info.validade.split('-').reverse().join('/') : '');
   const d = await post('sessoes'); sessoes = d.sessoes;
-  if (info.admin) { $('f-cli-w').style.display = ''; driveStatus(); }
+  if (info.admin) { $('f-cli-w').style.display = ''; }
   opcoes(); filtraSessoes();
 }
 function sair() { try { localStorage.removeItem('dvar_chave'); } catch (e) {} location.reload(); }
@@ -204,6 +242,78 @@ function excel() {
   if (!info.admin) dados.forEach(d => delete d['Cliente']);
   const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Inventário');
   XLSX.writeFile(wb, 'DVA_Roads_inventario_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+// ── abas ──
+const MODS = { marcozero: 'Marco Zero', slir: 'SLIR', sh: 'Sinalização Horizontal', sv: 'Sinalização Vertical', dg: 'DVA Placas' };
+let chaves = [], minha = '';
+function aba(t) {
+  document.querySelectorAll('#nav button[data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  $('app').style.display = t === 'inv' ? 'block' : 'none'; $('usw').style.display = t === 'us' ? 'block' : 'none';
+  $('dgw').style.display = t === 'dg' ? 'block' : 'none';
+  document.documentElement.style.setProperty('--hh', document.querySelector('header').offsetHeight + 'px');
+  if (t === 'dg' && !$('dgw').firstChild) $('dgw').innerHTML = `<iframe src="https://dvabrao.github.io/dva-roads/placas.html#k=${encodeURIComponent(chave)}" allow="clipboard-write"></iframe>`;
+  if (t === 'us') { carregaChaves(); driveStatus(); }
+}
+// ── usuários e chaves (só o administrador) ──
+async function carregaChaves() {
+  if (!$('n-mods').innerHTML) {
+    $('n-mods').innerHTML = Object.entries(MODS).map(([k, n]) => `<label><input type="checkbox" value="${k}" checked> ${n}</label>`).join('');
+    const d = new Date(); d.setFullYear(d.getFullYear() + 1); $('n-val').value = d.toISOString().slice(0, 10);
+  }
+  let d; try { d = await post('chaves-lista'); } catch (e) { $('c-tb').innerHTML = `<tr><td colspan="8">⚠️ ${esc(e.message)}</td></tr>`; return; }
+  chaves = d.chaves; minha = d.minha;
+  $('l-cli').innerHTML = d.clientes.map(c => `<option value="${esc(c.replace(/\s*\(administrador\)/i, ''))}">`).join('');
+  listaChaves();
+}
+const dtb = (v) => v ? v.split('-').reverse().join('/') : '';
+function listaChaves() {
+  const q = ($('c-busca').value || '').toLowerCase(), hoje = new Date().toISOString().slice(0, 10);
+  const l = chaves.filter(c => !q || [c.cliente, c.usuario, c.obs].join(' ').toLowerCase().includes(q));
+  $('c-cont').textContent = l.length + ' chave(s)';
+  $('c-tb').innerHTML = l.map(c => {
+    const adm = /\(administrador\)/i.test(c.cliente), venc = c.validade && c.validade < hoje;
+    const sit = c.revogada ? '<span class="tag r">cancelada</span>' : venc ? '<span class="tag r">vencida</span>' : '<span class="tag ok">ativa</span>';
+    const tipo = adm ? '<span class="tag a">administrador</span>' : c.gestor ? '<span class="tag">gestor</span>' : c.usuario ? '<span class="tag">técnico</span>' : '<span class="tag">cliente</span>';
+    const mods = c.modulos === '*' ? 'todos' : (c.modulos || '').split(',').map(m => MODS[m] || m).join(', ');
+    const eu = c.assin === minha ? ' <span class="tag a">você</span>' : '';
+    const bts = [c.chave ? `<button class="btn g" onclick="copiar('${c.assin}')">Copiar</button>` : '',
+      c.revogada ? `<button class="btn g" onclick="acaoChave('reativar','${c.assin}')">Reativar</button><button class="btn g" onclick="acaoChave('excluir','${c.assin}')">Excluir</button>`
+        : (c.assin === minha ? '' : `<button class="btn g" onclick="acaoChave('revogar','${c.assin}')">Cancelar</button>`),
+      `<button class="btn g" onclick="renovar('${c.assin}')">Renovar</button>`].join(' ');
+    return `<tr style="cursor:default"><td>${esc(c.cliente.replace(/\s*\(administrador\)/i, ''))}${eu}${c.obs ? `<br><span class="muted">${esc(c.obs)}</span>` : ''}</td><td>${esc(c.usuario || '—')}</td><td>${tipo}</td>
+      <td style="font-size:12px">${esc(mods)}</td><td>${dtb(c.validade)}</td><td style="font-size:12px">${c.ultimo ? new Date(c.ultimo).toLocaleString('pt-BR') : 'nunca'}</td><td>${sit}</td><td style="white-space:nowrap">${bts}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="muted">Nenhuma chave ainda.</td></tr>';
+}
+function mostraChave(k, titulo) {
+  const msg = 'Chave de acesso DVA Roads:\n' + k + '\n\nApp: https://github.com/dvabrao/dva-roads/releases/latest\nPainel: ' + location.origin + '/painel';
+  $('n-res').innerHTML = `<div class="lbl" style="margin-top:12px">${esc(titulo)}</div><div class="chv" id="n-chv">${esc(k)}</div>
+    <div class="row" style="margin-top:8px"><button class="btn" onclick="navigator.clipboard.writeText($('n-chv').textContent).then(()=>$('n-msg').textContent='✅ Copiada')">📋 Copiar chave</button>
+    <a class="btn g" style="text-decoration:none" target="_blank" href="https://wa.me/?text=${encodeURIComponent(msg)}">Enviar pelo WhatsApp</a></div>`;
+}
+async function criarChave() {
+  const adm = $('n-adm').checked;
+  const corpo = { cliente: $('n-cli').value, usuario: $('n-usu').value, validade: $('n-val').value, obs: $('n-obs').value, gestor: $('n-ges').checked, administrador: adm,
+    modulos: [...document.querySelectorAll('#n-mods input:checked')].map(i => i.value) };
+  if (adm && !confirm('Criar uma chave de ADMINISTRADOR? Ela vê e controla todos os clientes, usuários e chaves.')) return;
+  $('n-msg').textContent = 'Criando…';
+  let d; try { d = await post('chaves-criar', corpo); } catch (e) { $('n-msg').textContent = '⚠️ ' + e.message; return; }
+  $('n-msg').textContent = '✅ Chave criada'; mostraChave(d.chave, 'Chave de ' + (corpo.usuario || corpo.cliente));
+  carregaChaves();
+}
+function copiar(a) { const c = chaves.find(x => x.assin === a); if (c) { mostraChave(c.chave, 'Chave de ' + (c.usuario || c.cliente)); window.scrollTo(0, 0); } }
+function renovar(a) {
+  const c = chaves.find(x => x.assin === a); if (!c) return;
+  $('n-cli').value = c.cliente.replace(/\s*\(administrador\)/i, ''); $('n-usu').value = c.usuario || ''; $('n-obs').value = c.obs || '';
+  $('n-ges').checked = !!c.gestor; $('n-adm').checked = /\(administrador\)/i.test(c.cliente);
+  const ms = (c.modulos || '').split(','); document.querySelectorAll('#n-mods input').forEach(i => i.checked = c.modulos === '*' || ms.includes(i.value));
+  $('n-msg').textContent = 'Ajuste a validade e toque em Criar chave. Depois cancele a antiga, se quiser.'; window.scrollTo(0, 0);
+}
+async function acaoChave(acao, a) {
+  const c = chaves.find(x => x.assin === a);
+  const txt = { revogar: 'Cancelar a chave de ' + (c.usuario || c.cliente) + '? Ela para de funcionar na hora.', excluir: 'Excluir esta chave cancelada da lista?', reativar: 'Reativar esta chave?' }[acao];
+  if (!confirm(txt)) return;
+  try { await post('chaves-' + acao, { assin: a }); } catch (e) { alert(e.message); }
+  carregaChaves();
 }
 // ── cópia no Google Drive (só o administrador) ──
 async function driveStatus() {

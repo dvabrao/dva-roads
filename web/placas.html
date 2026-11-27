@@ -68,7 +68,13 @@
     if (!License.ok('dg')) { $('acesso').style.display = 'block'; if ($('lic-msg').textContent === 'Verificando…') $('lic-msg').textContent = '⚠️ Esta chave não libera o DVA Placas.'; return; }
     $('acesso').style.display = 'none'; DG.abrir();
   }
-  (async () => { try { await License.load(); } catch (e) {} iniciar(); })();
+  (async () => {
+    try { await License.load(); } catch (e) {}
+    // aberto pelo painel: a chave vem no endereço (#k=...), é ativada e apagada do endereço
+    const m = location.hash.match(/[#&]k=([^&]+)/);
+    if (m) { history.replaceState(null, '', location.pathname + location.search); try { await License.activate(decodeURIComponent(m[1])); } catch (e) {} }
+    iniciar();
+  })();
 </script>
 </body>
 </html>
