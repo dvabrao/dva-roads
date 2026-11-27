@@ -7,7 +7,7 @@
 // ════════════════════════════════════════════════════════════════
 const License = (function () {
   const PUB = { kty: 'EC', crv: 'P-256', x: 'kvyvNzzQgU2JkaglthbI_WrM1q2eYGW1BFvl25mWbEA', y: '2fvhpRcQTeLAPENlOgBaIAW-PPzSxkk3Rh0x3h1vY_w' };
-  const PUB2 = null;   // chave pública do servidor (chaves criadas no painel)
+  const PUB2 = { kty: 'EC', crv: 'P-256', x: 'S0a9FZC57d2ukN72k3ePnNjvO3r8CqSCHS-ikle7LEI', y: '9qIhyg9S3IzCkWIploe8v_kA4rK09VqTQ75wK7C59l4' };   // chave pública do servidor (chaves criadas no painel)
   const KEY = 'dvaroads_licencas';
   // chaves canceladas (começo da assinatura): deixam de valer no app e no servidor
   const REVOGADAS = ['ddqgEl7xU6NxE07gOrRAivZR'];
