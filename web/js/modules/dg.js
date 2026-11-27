@@ -84,7 +84,7 @@
         <div class="chips" style="margin-top:6px">${chip('velocidade', [40, 60, 80, 100, 110, 120], cfg.velocidade)}<span style="font-size:12px;align-self:center;color:#5B6B82">km/h</span></div></div>
       <div class="dg-exp" style="grid-template-columns:1fr 1fr;margin:0 0 12px">
         <button onclick="DG.novo('texto')">✏️ Placa de texto</button>
-        <button onclick="DG.novo('placa')">🛑 Catálogo R / A</button>
+        <button onclick="DG.novo('placa')">🛑 Catálogo R / A / MA / MP</button>
         <button onclick="DG.novo('composta')">▭ Retangular com sinal</button>
         <button onclick="DG.abrirArquivo()">📂 Abrir DXF / WMF / SVG</button>
         <button onclick="DG.daFoto()" style="background:#FFD740;color:#111D3D;grid-column:1/3">📷 Da foto (IA)</button></div>
@@ -120,15 +120,16 @@
       <div class="fgrid"><div class="field"><label>Largura fixa (mm)</label><input class="inp" inputmode="numeric" value="${P.L || ''}" placeholder="automática" oninput="DG.setP('L',+this.value||null)"></div>
         <div class="field"><label>Altura fixa (mm)</label><input class="inp" inputmode="numeric" value="${P.H || ''}" placeholder="automática" oninput="DG.setP('H',+this.value||null)"></div></div>`;
   }
-  const codigos = () => Object.keys(window.DG_PICTOS || {}).sort((a, b) => a[0].localeCompare(b[0]) || parseInt(a.slice(2)) - parseInt(b.slice(2)) || a.localeCompare(b));
+  const codigos = () => Object.keys(window.DG_PICTOS || {}).concat(Object.keys(DGMotor.DISPOSITIVOS || {})).sort((a, b) => a[0].localeCompare(b[0]) || parseInt(a.slice(2)) - parseInt(b.slice(2)) || a.localeCompare(b));
   function gradeCat(P, q) {
     q = (q || '').toLowerCase().trim();
     return codigos().filter(c => !q || c.toLowerCase().includes(q)).map(c => `<button class="${P.codigo === c ? 'on' : ''}" onclick="DG.setP('codigo','${c}',true)"><img src="img/placas/${c}.png" onerror="this.style.visibility='hidden'">${c}</button>`).join('');
   }
   function formPlaca(P) {
-    return `<div class="field"><label>Placa</label><input class="inp" id="dg-q" placeholder="🔎 filtrar código (ex.: R-19, A-2)" oninput="$('dg-cat').innerHTML=DG.grade(this.value)" style="margin-bottom:6px">
+    return `<div class="field"><label>Placa</label><input class="inp" id="dg-q" placeholder="🔎 filtrar código (ex.: R-19, A-2, MP, MA)" oninput="$('dg-cat').innerHTML=DG.grade(this.value)" style="margin-bottom:6px">
         <div class="dg-cat" id="dg-cat">${gradeCat(P)}</div></div>
       <div class="fgrid"><div class="field"><label>Tamanho (DER)</label><select class="inp" onchange="DG.setP('tipoTam',this.value)">${Object.entries(DGMotor.TAMANHOS).map(([k, v]) => `<option value="${k}" ${P.tipoTam === k ? 'selected' : ''}>Tipo ${k} · ${v} mm</option>`).join('')}</select></div>
+        ${P.codigo === 'MA-N' ? `<div class="field"><label>Número</label><input class="inp" inputmode="numeric" value="${esc(P.valor || '')}" oninput="DG.setP('valor',this.value)"></div>` : ''}
         ${P.codigo === 'R-19' ? `<div class="field"><label>Velocidade (km/h)</label><input class="inp" inputmode="numeric" value="${esc(P.valor || '')}" oninput="DG.setP('valor',this.value)"></div>` : ''}</div>
       <button class="btn-full gray" style="margin-bottom:10px" onclick="DG.retangular()">▭ Fazer placa retangular com este sinal (sinal + seta)</button>
       <div class="field"><label>Placa complementar (opcional, uma linha por linha)</label><textarea class="inp" rows="2" placeholder="ex.: A 300 m" oninput="DG.setP('compl',this.value)">${esc(P.compl || '')}</textarea></div>`;
@@ -332,5 +333,5 @@
     exportar, daFoto, foto,
   };
 
-  if (window.Modules) Modules.register({ id: 'dg', nome: 'DVA Placas', sub: 'Diagramação de placas DER-SP · abre e gera PDF, DXF, WMF e JPG', icone: '📐', prefixo: 'D', ferramenta: true, abrir: () => DG.abrir() });
+  if (typeof Modules !== 'undefined' && Modules) Modules.register({ id: 'dg', nome: 'DVA Placas · Diagramação', sub: 'Placas DER-SP · abre e gera PDF, DXF, WMF e JPG', icone: '📐', prefixo: 'D', ferramenta: true, abrir: () => DG.abrir() });
 })();

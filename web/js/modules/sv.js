@@ -19,6 +19,7 @@
   const CAT = {
     R: { n: 'Regulamentação', ico: 'R' }, A: { n: 'Advertência', ico: 'A' }, I: { n: 'Indicação', ico: 'I' },
     EDU: { n: 'Educativa', ico: 'EDU' }, SA: { n: 'Serviços auxiliares', ico: 'SA' }, TUR: { n: 'Atrativo turístico', ico: 'TUR' }, OBR: { n: 'Obras', ico: 'OBR' },
+    DA: { n: 'Dispositivos auxiliares', ico: 'DA' },
   };
   const CATALOGO_PADRAO = {
     // códigos e nomes conforme o índice do MBST, Vol. I e Vol. II (CONTRAN, 2022)
@@ -28,6 +29,11 @@
       'Pré-sinalização', 'Marco quilométrico', 'Identificação de ponte / curso d’água'],
     EDU: ['Educativa'], SA: ['Posto de combustível', 'Restaurante', 'Hospital / pronto-socorro', 'Polícia rodoviária', 'Área de descanso', 'Telefone de emergência'],
     TUR: ['Atrativo turístico'], OBR: ['Obras / desvio', 'Fim de obras'],
+    // DER-SP V.II, seção F (MA e MP) e MBST Vol. VI (balizadores e delimitadores)
+    DA: ['MA-D Marcador de alinhamento (seta à direita)', 'MA-E Marcador de alinhamento (seta à esquerda)', 'MA-N Marcador de alinhamento numerado',
+      'MP-1 Marcador de perigo', 'MP-2 Marcador de perigo', 'MP-3 Marcador de perigo (em V)',
+      'Balizador de borda (delineador)', 'Balizador em defensa / barreira', 'Balizador flexível (cilindro delimitador)', 'Balizador de ponte / obra de arte',
+      'Marcador de obstáculo', 'Tachão'],
   };
   const LADOS = { D: 'Direito', E: 'Esquerdo', CC: 'Canteiro central', AE: 'Aérea (pórtico)' };
   const SUPORTES = ['Coluna simples', 'Coluna dupla', 'Semipórtico', 'Pórtico', 'Poste existente', 'Fixada em estrutura', 'Sem suporte'];
@@ -47,12 +53,18 @@
   function dimsNorma(cod, cat, p) {
     const t = tipoDER(p), S = TIPO_TAM[t]; const c = codDe(cod || '') || '';
     if (cat === 'R') { if (c === 'R-2') return { t, larg: S, alt: +(S * 0.866).toFixed(2) }; return { t, larg: S, alt: S }; }
+    if (cat === 'DA') {
+      if (/^MA/.test(c)) return { t, larg: 0.5, alt: 0.6 };
+      if (/^MP/.test(c)) { const g = ['0', 'Ia', 'Ib'].includes((p || {}).classe) || (!(p || {}).classe && t !== 'I'); return g ? { t, larg: 0.5, alt: 1.5 } : { t, larg: 0.3, alt: 0.8 }; }
+      return null;
+    }
     if (cat === 'A') { if (/^A-26/.test(c)) return { t, larg: +(S * 1.5).toFixed(2), alt: +(S * 0.5).toFixed(2) }; return { t, larg: S, alt: S }; }
     return null;
   }
   /** placas que têm um valor escrito (velocidade, limites) ou texto livre */
   function pedeTexto(cod, cat) {
     const c = codDe(cod || '') || '';
+    if (cat === 'DA' && cod !== '__outro') return c === 'MA-N' ? 'Número' : null;
     if (cod === '__outro' || !['R', 'A'].includes(cat)) return 'Texto na placa';
     if (c === 'R-19') return 'Velocidade (km/h)';
     if (/^R-1[4-8]$/.test(c)) return 'Limite indicado na placa';
@@ -62,10 +74,10 @@
   const PELICULAS = ['Não verificada', 'Grau técnico', 'Alta intensidade', 'Grau diamante / prismática', 'Sem película refletiva'];
   // dispositivos de segurança por trecho e pontuais
   const SEGS = { DEF: { n: 'Defensa metálica', tipos: ['Simples', 'Dupla', 'Semimaleável', 'Maleável'] }, BAR: { n: 'Barreira rígida', tipos: ['New Jersey', 'Perfil F', 'Vertical', 'Simples (meia barreira)'] } };
-  const DISP = ['Terminal de defensa', 'Atenuador de impacto', 'Delineador / balizador', 'Marcador de obstáculo', 'Marco quilométrico', 'Pórtico / semipórtico', 'Tela antiofuscante'];
+  const DISP = ['Terminal de defensa', 'Atenuador de impacto', 'Marco quilométrico', 'Pórtico / semipórtico', 'Tela antiofuscante'];
 
   // figura oficial da placa (índice do MBST); sem figura, usa o ícone da categoria
-  const codDe = (txt) => { const m = String(txt || '').match(/^([RA]-\d+[a-z]?)\b/); return m ? m[1] : null; };
+  const codDe = (txt) => { const m = String(txt || '').match(/^([RA]-\d+[a-z]?|MA-[DEN]|MP-[123])(?![\w-])/); return m ? m[1] : null; };
   const figura = (txt, cat, px) => {
     const c = codDe(txt); px = px || 44;
     const fb = `<span class="sv-fig-fb" style="width:${px}px;height:${px}px">${ic[cat] || ic.R}</span>`;
@@ -85,6 +97,7 @@
     OBR: '<svg viewBox="0 0 40 40"><rect x="8" y="8" width="24" height="24" transform="rotate(45 20 20)" fill="#EF6C00" stroke="#111" stroke-width="2"/><text x="20" y="24" font-size="8" font-weight="800" text-anchor="middle" fill="#111" font-family="Arial">OBR</text></svg>',
     DEF: '<svg viewBox="0 0 40 40"><rect x="9" y="14" width="3" height="20" fill="#555"/><rect x="28" y="14" width="3" height="20" fill="#555"/><path d="M3 15 h34 v3 l-3 2 l3 2 v3 h-34 v-3 l3 -2 l-3 -2z" fill="#90A4AE" stroke="#455A64" stroke-width="1.2"/></svg>',
     BAR: '<svg viewBox="0 0 40 40"><path d="M14 6 h12 v8 l6 16 v4 h-24 v-4 l6 -16z" fill="#BDBDBD" stroke="#616161" stroke-width="1.5"/></svg>',
+    DA: '<svg viewBox="0 0 40 40"><rect x="13" y="3" width="14" height="34" fill="#F5C500" stroke="#111" stroke-width="1.5"/><path d="M13 9 l14 -6 v6 l-14 6z M13 21 l14 -6 v6 l-14 6z M13 33 l14 -6 v6 l-14 4z" fill="#111"/></svg>',
     DISP: '<svg viewBox="0 0 40 40"><rect x="17" y="6" width="6" height="28" fill="#fff" stroke="#111" stroke-width="1.5"/><rect x="17" y="9" width="6" height="5" fill="#F5C500"/><rect x="10" y="33" width="20" height="3" fill="#555"/></svg>',
   };
 
@@ -169,7 +182,7 @@
         <div class="sh-grp"><div class="sh-grp-t">Placas</div><div class="sh-grid">
           ${b('R', 'Regulamentação', "SV.placa('R')")}${b('A', 'Advertência', "SV.placa('A')")}${b('I', 'Indicação', "SV.placa('I')")}
           ${b('EDU', 'Educativa', "SV.placa('EDU')")}${b('SA', 'Serviços', "SV.placa('SA')")}${b('TUR', 'Turística', "SV.placa('TUR')")}
-          ${b('OBR', 'Obras', "SV.placa('OBR')")}</div></div>
+          ${b('OBR', 'Obras', "SV.placa('OBR')")}${b('DA', 'Marcadores e balizadores', "SV.placa('DA')")}</div></div>
         <div class="sh-grp"><div class="sh-grp-t">Dispositivos de segurança</div><div class="sh-grid">
           ${b('DEF', 'Defensa', "SV.iniSeg('DEF')", 'início do trecho')}${b('BAR', 'Barreira rígida', "SV.iniSeg('BAR')", 'início do trecho')}${b('DISP', 'Outro dispositivo', 'SV.disp()', 'terminal, atenuador...')}</div></div>
         <div style="display:flex;gap:8px;margin-top:6px"><button class="btn-sm n" style="flex:1" onclick="Export.open()">📤 Exportar</button><button class="btn-sm g" style="flex:1" onclick="SV.editarCatalogo()">✏️ Catálogo de placas</button></div>

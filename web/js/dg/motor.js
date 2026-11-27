@@ -235,7 +235,70 @@ const DGMotor = (function () {
 
   // ── placas do catálogo (R e A) com pictograma vetorial do DER ──
   const TAMANHOS = { I: 800, II: 1000, III: 1200 };
+
+  // ── dispositivos auxiliares (DER-SP V.II, seção F): marcador de alinhamento MA e marcadores de perigo MP-1/2/3 ──
+  const DISPOSITIVOS = { 'MA-D': 'Marcador de alinhamento · seta à direita', 'MA-E': 'Marcador de alinhamento · seta à esquerda',
+    'MA-N': 'Marcador de alinhamento · numerado', 'MP-1': 'Marcador de perigo MP-1', 'MP-2': 'Marcador de perigo MP-2', 'MP-3': 'Marcador de perigo MP-3 (em V)' };
+  // recorta polígono convexo por retângulo (Sutherland–Hodgman)
+  function recorta(poly, x0, y0, x1, y1) {
+    const lados = [[p => p[0] >= x0, (a, b) => [x0, a[1] + (b[1] - a[1]) * (x0 - a[0]) / (b[0] - a[0])]],
+      [p => p[0] <= x1, (a, b) => [x1, a[1] + (b[1] - a[1]) * (x1 - a[0]) / (b[0] - a[0])]],
+      [p => p[1] >= y0, (a, b) => [a[0] + (b[0] - a[0]) * (y0 - a[1]) / (b[1] - a[1]), y0]],
+      [p => p[1] <= y1, (a, b) => [a[0] + (b[0] - a[0]) * (y1 - a[1]) / (b[1] - a[1]), y1]]];
+    let out = poly;
+    for (const [dentro, corta] of lados) {
+      const inp = out; out = [];
+      for (let i = 0; i < inp.length; i++) {
+        const a = inp[i], b = inp[(i + 1) % inp.length];
+        if (dentro(b)) { if (!dentro(a)) out.push(corta(a, b)); out.push(b); } else if (dentro(a)) out.push(corta(a, b));
+      }
+      if (!out.length) break;
+    }
+    return out.length >= 3 ? out : null;
+  }
+  function dispositivo(P) {
+    const c = P.codigo, cams = [], avisos = [];
+    if (/^MA/.test(c)) {
+      const W = 500, H = 600;
+      if (c === 'MA-N') {
+        cams.push({ nome: 'FUNDO', cor: 'amarelo', paths: [rrect(0, 0, W, H, 20)] });
+        const t = String(P.valor || '10'), h = 250, w = larguraTexto(t, 'D', h);
+        cams.push({ nome: 'TEXTO', cor: 'preto', paths: contornosTexto(t, 'D', h, W / 2 - w / 2, 175) });
+        if (w > W - 60) avisos.push('Número largo demais para a placa.');
+      } else {
+        cams.push({ nome: 'FUNDO', cor: 'preto', paths: [rrect(0, 0, W, H, 20)] });
+        let ch = [[40, 40], [260, 40], [460, 300], [260, 560], [40, 560], [240, 300]];
+        if (c === 'MA-E') ch = ch.map(([x, y]) => [W - x, y]).reverse();
+        cams.push({ nome: 'SIMBOLO', cor: 'amarelo', paths: [ch] });
+      }
+      return { L: W, H, calc: { L: W, H }, avisos, camadas: cams };
+    }
+    // MP: classes 0 e I (Tipo II/III) 0,50 × 1,50 m; classes II, III e IV (Tipo I) 0,30 × 0,80 m; faixas de 0,10 m a 45°
+    const grande = P.tipoTam && P.tipoTam !== 'I';
+    const W = grande ? 500 : 300, H = grande ? 1500 : 800, f = 100 * Math.SQRT2, pretas = [];
+    if (c === 'MP-3') {
+      // faixas em V (ponta para baixo): u = y + |x − W/2|; cada metade é um paralelogramo convexo
+      for (let u = -W; u < H + W; u += 2 * f) {
+        for (const lado of [-1, 1]) {
+          const x0 = W / 2, x1 = lado < 0 ? 0 : W, d = W / 2;
+          const poly = [[x0, u], [x0, u + f], [x1, u + f - d], [x1, u - d]];
+          const r = recorta(lado < 0 ? poly : poly.slice().reverse(), Math.min(x0, x1), 0, Math.max(x0, x1), H); if (r) pretas.push(r);
+        }
+      }
+    } else {
+      // MP-1: faixas "/" (x + y = cte), canto inferior direito preto; MP-2 espelhado
+      for (let k = W + H; k > -2 * f; k -= 2 * f) {
+        const poly = [[k - H - f, H], [k - H, H], [k, 0], [k - f, 0]];
+        const r = recorta(poly, 0, 0, W, H); if (r) pretas.push(c === 'MP-2' ? r.map(([x, y]) => [W - x, y]).reverse() : r);
+      }
+    }
+    cams.push({ nome: 'FUNDO', cor: 'amarelo', paths: [rrect(0, 0, W, H, 0)] });
+    cams.push({ nome: 'FAIXAS', cor: 'preto', paths: pretas });
+    return { L: W, H, calc: { L: W, H }, avisos, camadas: cams };
+  }
+
   function placaCatalogo(P) {
+    if (DISPOSITIVOS[P.codigo]) return dispositivo(P);
     const pic = (window.DG_PICTOS || {})[P.codigo]; const avisos = [];
     if (!pic) return { L: 800, H: 800, avisos: ['Sem desenho vetorial para ' + P.codigo + '.'], camadas: [] };
     // R: diâmetro (ou largura do octógono / lado do triângulo); A: lado do quadrado girado 45° (diagonal = lado × √2)
@@ -539,5 +602,5 @@ const DGMotor = (function () {
     return btoa(bin);
   }
 
-  return { carregarFonte, desenhar, svg, jpg, pdf, prancha, dxf, wmf, hexRGB, col, ESQUEMAS, CLASSES, CORES, TAMANHOS, larguraTexto, serieDe };
+  return { carregarFonte, desenhar, svg, jpg, pdf, prancha, dxf, wmf, hexRGB, col, ESQUEMAS, CLASSES, CORES, TAMANHOS, DISPOSITIVOS, larguraTexto, serieDe };
 })();
