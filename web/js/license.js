@@ -1,7 +1,7 @@
 // ════════════════════════════════════════════════════════════════
 //  DVA Roads — licenças por módulo (ativação por chave)
 //  Chave: DVAR1.<dados em base64url>.<assinatura ECDSA P-256 em base64url>
-//  dados = {c: cliente, m: ["marcozero","slir","sh"] ou ["*"], v: "AAAA-MM-DD", e: emissão}
+//  dados = {c: cliente, m: ["marcozero","slir","sh"] ou ["*"], v: "AAAA-MM-DD", e: emissão, u: técnico (opcional), g: 1 = gestor (opcional)}
 //  O app só tem a chave PÚBLICA: confere a assinatura, não consegue criar chaves.
 //  As chaves são geradas no Painel DVA Roads com a chave privada (fora do app).
 // ════════════════════════════════════════════════════════════════
@@ -48,7 +48,7 @@ const License = (function () {
       const h = hoje();
       const l = lic.filter(l => (l.m || []).some(x => x === '*' || x === mod)).sort((a, b) => (b.v || '9999') > (a.v || '9999') ? 1 : -1)[0];
       if (!l) return null;
-      return { cliente: l.c, validade: l.v, vencida: l.v && l.v < h, admin: (l.m || []).includes('*') };
+      return { cliente: l.c, usuario: l.u || '', validade: l.v, vencida: l.v && l.v < h, admin: (l.m || []).includes('*') };
     },
     /** Chave (texto) que libera o módulo, para o servidor conferir */
     raw(mod) { const h = hoje(); const l = lic.find(l => (!l.v || l.v >= h) && (l.m || []).some(x => x === '*' || x === mod)); return l ? l.raw : ''; },
@@ -64,7 +64,7 @@ const License = (function () {
       try {
         const d = await License.activate(el.value);
         el.value = '';
-        toast('🔑 Chave ativada' + (d.c ? ' · ' + d.c : ''));
+        toast('🔑 Chave ativada' + (d.c ? ' · ' + d.c : '') + (d.u ? ' · ' + d.u : ''));
         UI.renderLicencas(); UI.render();
       } catch (e) { UI.alert('Chave não ativada', e.message); }
     },

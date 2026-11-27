@@ -154,7 +154,7 @@ const UI = (function () {
   function renderLicencas() {
     $('lic-list').innerHTML = Modules.list().map(m => {
       const i = License.info(m.id); const ok = License.ok(m.id);
-      const det = i ? (i.admin ? 'administrador' : esc(i.cliente || '')) + (i.validade && i.validade < '2099' ? ' · até ' + i.validade.split('-').reverse().join('/') : '') : 'sem chave';
+      const det = i ? (i.admin ? 'administrador' : esc(i.cliente || '') + (i.usuario ? ' · ' + esc(i.usuario) : '')) + (i.validade && i.validade < '2099' ? ' · até ' + i.validade.split('-').reverse().join('/') : '') : 'sem chave';
       return `<div class="lic-row"><span>${m.icone}</span><span class="n">${esc(m.nome)}<br><small style="font-weight:400;color:var(--sub)">${det}</small></span>${ok ? '<span class="ok-tag">liberado</span>' : '<span class="no-tag">bloqueado</span>'}</div>`;
     }).join('');
   }

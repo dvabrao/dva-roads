@@ -51,6 +51,9 @@ td{padding:7px 8px;border-bottom:1px solid #EEF1F5;vertical-align:middle}tr:hove
 </div>
 
 <div id="app" style="display:none">
+  <div class="card" id="dv" style="display:none">
+    <div class="row"><div class="lbl" style="margin:0">☁️ Cópia no Google Drive</div><span class="muted" id="dv-st">verificando…</span><span style="flex:1"></span><span id="dv-bt" class="row"></span></div>
+  </div>
   <div class="card">
     <div class="filtros">
       <div id="f-cli-w" style="display:none"><div class="lbl">Cliente</div><select id="f-cli" onchange="filtraSessoes()"></select></div>
@@ -58,6 +61,7 @@ td{padding:7px 8px;border-bottom:1px solid #EEF1F5;vertical-align:middle}tr:hove
       <div><div class="lbl">Rodovia</div><select id="f-rod" onchange="filtraSessoes()"></select></div>
       <div><div class="lbl">Órgão / concessionária</div><select id="f-org" onchange="filtraSessoes()"></select></div>
       <div><div class="lbl">Tipo de levantamento</div><select id="f-tipo" onchange="filtraSessoes()"></select></div>
+      <div id="f-usu-w" style="display:none"><div class="lbl">Técnico</div><select id="f-usu" onchange="filtraSessoes()"></select></div>
     </div>
     <div class="row" style="margin:12px 0 8px"><div class="lbl" style="margin:0">Sessões</div><span class="muted" id="s-cont"></span><span style="flex:1"></span>
       <button class="btn g" onclick="marcar(true)">Todas</button><button class="btn g" onclick="marcar(false)">Nenhuma</button><button class="btn" onclick="carregar()">Mostrar</button></div>
@@ -107,9 +111,9 @@ async function entrar() {
   try { info = await post('login'); } catch (e) { $('l-msg').textContent = '⚠️ ' + e.message; return; }
   try { localStorage.setItem('dvar_chave', chave); } catch (e) {}
   $('login').style.display = 'none'; $('app').style.display = 'block'; $('b-sair').style.display = '';
-  $('h-cli').textContent = info.cliente + (info.validade ? ' · licença até ' + info.validade.split('-').reverse().join('/') : '');
+  $('h-cli').textContent = info.cliente + (info.usuario ? ' · ' + info.usuario + (info.gestor ? ' (gestor)' : '') : '') + (info.validade ? ' · licença até ' + info.validade.split('-').reverse().join('/') : '');
   const d = await post('sessoes'); sessoes = d.sessoes;
-  if (info.admin) $('f-cli-w').style.display = '';
+  if (info.admin) { $('f-cli-w').style.display = ''; driveStatus(); }
   opcoes(); filtraSessoes();
 }
 function sair() { try { localStorage.removeItem('dvar_chave'); } catch (e) {} location.reload(); }
@@ -117,17 +121,19 @@ function opts(id, vals, todos) { const v = $(id).value; $(id).innerHTML = `<opti
 function opcoes() {
   opts('f-cli', sessoes.map(s => s.cliente), 'Todos'); opts('f-mod', sessoes.map(s => MOD[s.modulo] || s.modulo), 'Todos');
   opts('f-rod', sessoes.map(s => s.rodovia), 'Todas'); opts('f-org', sessoes.map(s => s.orgao), 'Todos'); opts('f-tipo', sessoes.map(s => s.tipo), 'Todos');
+  opts('f-usu', sessoes.map(s => s.usuario), 'Todos');
+  $('f-usu-w').style.display = new Set(sessoes.map(s => s.usuario).filter(Boolean)).size > 0 ? '' : 'none';
 }
 function sessoesFiltradas() {
-  const c = $('f-cli').value, m = $('f-mod').value, r = $('f-rod').value, o = $('f-org').value, t = $('f-tipo').value;
-  return sessoes.filter(s => (!c || s.cliente === c) && (!m || (MOD[s.modulo] || s.modulo) === m) && (!r || s.rodovia === r) && (!o || s.orgao === o) && (!t || s.tipo === t));
+  const c = $('f-cli').value, m = $('f-mod').value, r = $('f-rod').value, o = $('f-org').value, t = $('f-tipo').value, u = $('f-usu').value;
+  return sessoes.filter(s => (!u || s.usuario === u) && (!c || s.cliente === c) && (!m || (MOD[s.modulo] || s.modulo) === m) && (!r || s.rodovia === r) && (!o || s.orgao === o) && (!t || s.tipo === t));
 }
 const dt = (t) => t ? new Date(t).toLocaleDateString('pt-BR') : '';
 function filtraSessoes() {
   const l = sessoesFiltradas();
   $('s-cont').textContent = l.length + ' de ' + sessoes.length;
   $('ses').innerHTML = l.map(s => `<label><input type="checkbox" value="${esc(s.id)}" checked style="width:auto">
-    <span><b>${esc(s.nome)}</b><br><small>${esc([MOD[s.modulo] || s.modulo, s.rodovia, s.tipo, s.orgao].filter(Boolean).join(' · '))}<br>${dt(s.ini)} · ${s.nitens || 0} registros${info.admin ? ' · ' + esc(s.cliente) : ''}</small></span></label>`).join('')
+    <span><b>${esc(s.nome)}</b><br><small>${esc([MOD[s.modulo] || s.modulo, s.rodovia, s.tipo, s.orgao].filter(Boolean).join(' · '))}<br>${dt(s.ini)} · ${s.nitens || 0} registros${s.usuario ? ' · 👷 ' + esc(s.usuario) : ''}${info.admin ? ' · ' + esc(s.cliente) : ''}</small></span></label>`).join('')
     || '<span class="muted">Nenhuma sessão enviada ainda. No app: Exportar → ☁️ Enviar ao painel web.</span>';
 }
 function marcar(v) { document.querySelectorAll('#ses input').forEach(i => i.checked = v); }
@@ -142,7 +148,7 @@ async function carregar() {
     if (s.trajeto && s.trajeto.length) tr.push(s.trajeto.map(p => [p[0], p[1]]));
     (s.eventos || []).forEach(ev => {
       const dd = ev.dados || {};
-      rows.push({ cliente: s.cliente, sid: s.id, sessao: s.nome, rodovia: s.rodovia, orgao: s.orgao, tipoLev: s.tipo,
+      rows.push({ cliente: s.cliente, usuario: s.usuario || '', sid: s.id, sessao: s.nome, rodovia: s.rodovia, orgao: s.orgao, tipoLev: s.tipo,
         codigo: ev.codigo || '', posicao: ev.posicao || '', km: ev.km, est: ev.est, item: ev.item || ev.rotulo || '', cat: ev.categoria || GRUPO[ev.grupo] || ev.grupo || '',
         lado: ev.ladoTxt || '', estado: dd.estado || '', obs: ev.obs || '', detalhes: ev.detalhes || '', fotos: ev.fotos || [], lat: ev.lat, lon: ev.lon, t: ev.t, fig: ev.figura || '' });
     });
@@ -181,7 +187,7 @@ async function detalhe(i) {
   $('mbox').innerHTML = `<div class="row"><h3 style="margin:0;flex:1">${r.fig ? `<img class="fig" style="width:44px;height:44px" src="${FIG + r.fig}.png" onerror="this.remove()"> ` : ''}${esc(r.codigo)} · ${esc(r.item)}</h3><button class="btn g" onclick="$('modal').style.display='none'">✕</button></div>
     <p><b>${esc(r.posicao)}</b><br>${esc([r.cat, r.lado && 'Lado ' + r.lado, r.estado].filter(Boolean).join(' · '))}<br>
     ${r.detalhes ? esc(r.detalhes) + '<br>' : ''}${r.obs ? 'Obs.: ' + esc(r.obs) + '<br>' : ''}
-    <span class="muted">${esc(r.sessao)} · ${esc(r.rodovia || '')} · ${r.t ? new Date(r.t).toLocaleString('pt-BR') : ''}${r.lat != null ? ` · <a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lon}">ver no Google Maps</a>` : ''}</span></p>
+    <span class="muted">${esc(r.sessao)} · ${esc(r.rodovia || '')}${r.usuario ? ' · 👷 ' + esc(r.usuario) : ''} · ${r.t ? new Date(r.t).toLocaleString('pt-BR') : ''}${r.lat != null ? ` · <a target="_blank" href="https://www.google.com/maps?q=${r.lat},${r.lon}">ver no Google Maps</a>` : ''}</span></p>
     <div id="m-fotos">${r.fotos.length ? 'Carregando fotos…' : '<span class="muted">Sem fotos</span>'}</div>`;
   $('modal').style.display = 'flex';
   const out = [];
@@ -192,12 +198,40 @@ async function detalhe(i) {
   if (r.fotos.length) $('m-fotos').innerHTML = out.join('');
 }
 function excel() {
-  const dados = vis.map(r => ({ 'Cliente': r.cliente, 'Sessão': r.sessao, 'Rodovia': r.rodovia, 'Órgão': r.orgao, 'Tipo de levantamento': r.tipoLev,
+  const dados = vis.map(r => ({ 'Cliente': r.cliente, 'Sessão': r.sessao, 'Técnico': r.usuario, 'Rodovia': r.rodovia, 'Órgão': r.orgao, 'Tipo de levantamento': r.tipoLev,
     'Código': r.codigo, 'Posição': r.posicao, 'Km': r.km != null ? +(+r.km).toFixed(3) : '', 'Tipo de item': r.cat, 'Item': r.item, 'Lado': r.lado, 'Estado': r.estado,
     'Detalhes': r.detalhes, 'Observação': r.obs, 'Fotos': r.fotos.length, 'Latitude': r.lat, 'Longitude': r.lon, 'Data': r.t ? new Date(r.t).toLocaleString('pt-BR') : '' }));
   if (!info.admin) dados.forEach(d => delete d['Cliente']);
   const ws = XLSX.utils.json_to_sheet(dados); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Inventário');
   XLSX.writeFile(wb, 'DVA_Roads_inventario_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+// ── cópia no Google Drive (só o administrador) ──
+async function driveStatus() {
+  $('dv').style.display = '';
+  let d; try { d = await post('drive-status'); } catch (e) { $('dv-st').textContent = '⚠️ ' + e.message; return; }
+  const bt = [];
+  if (!d.configurado) { $('dv-st').textContent = 'ainda não configurada no servidor (faltam os dados do Google no Cloudflare).'; $('dv-bt').innerHTML = ''; return; }
+  if (!d.conectado) { $('dv-st').textContent = 'não conectada.'; bt.push('<button class="btn y" onclick="driveConectar()">Conectar Google Drive</button>'); }
+  else {
+    const p = d.pendentes || {};
+    $('dv-st').innerHTML = '✅ ligada' + (d.conta ? ' · ' + esc(d.conta) : '') + (p.sessoes || p.fotos ? ` · falta copiar: ${p.sessoes} sessão(ões), ${p.fotos} foto(s)` : ' · tudo copiado')
+      + (d.erro ? `<br>⚠️ último erro (${new Date(d.erro.t).toLocaleString('pt-BR')}): ${esc(d.erro.msg)}` : '');
+    if (d.raiz) bt.push(`<button class="btn g" onclick="window.open('https://drive.google.com/drive/folders/${esc(d.raiz)}','_blank')">Abrir pasta</button>`);
+    bt.push('<button class="btn" onclick="driveCopiar(false)">Copiar tudo para o Drive</button>');
+    bt.push('<button class="btn g" onclick="driveDesligar()">Desconectar</button>');
+  }
+  $('dv-bt').innerHTML = bt.join('');
+}
+async function driveConectar() { try { const d = await post('drive-link'); location.href = d.url; } catch (e) { alert(e.message); } }
+async function driveDesligar() { if (!confirm('Parar a cópia automática no Google Drive? Os arquivos já copiados continuam lá.')) return; await post('drive-desconectar'); driveStatus(); }
+async function driveCopiar(tudo) {
+  $('dv-bt').innerHTML = '';
+  for (let i = 0; i < 1000; i++) {
+    let d; try { d = await post('drive-sincronizar', { tudo: tudo && i === 0 }); } catch (e) { $('dv-st').textContent = '⚠️ ' + e.message; break; }
+    const p = d.pendentes; $('dv-st').textContent = `⏳ copiando… faltam ${p.sessoes} sessão(ões) e ${p.fotos} foto(s)`;
+    if (!p.sessoes && !p.fotos) break;
+  }
+  driveStatus();
 }
 if (chave) { $('k').value = ''; entrar(); }
 $('k').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
