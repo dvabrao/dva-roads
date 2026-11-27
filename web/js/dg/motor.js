@@ -174,7 +174,7 @@ const DGMotor = (function () {
   function placaTexto(P) {
     const cl = CLASSES[P.classe] || CLASSES.II, es = ESQUEMAS[P.esquema] || ESQUEMAS.verde;
     const C = cl.orla + cl.afast, avisos = [];
-    const linhas = (P.linhas || []).filter(l => (l.texto || '').trim() || l.seta || l.escudo || (l.dist || '').trim());
+    const linhas = (P.linhas || []).filter(l => (l.texto || '').trim() || l.seta || l.escudo || (l.dist || '').trim() || (l.img && l.img.src));
     if (!linhas.length) linhas.push({ texto: 'Texto', h: cl.hPadrao });
     const R = linhas.map(l => {
       const h = +l.h || cl.hPadrao, sTx = serieDe(l.texto || '', l.serie);
@@ -182,10 +182,12 @@ const DGMotor = (function () {
       const dist = (l.dist || '').trim(); const dw = dist ? larguraTexto(dist, 'EM', h) : 0;
       const st = l.seta ? seta(l.seta, h) : null; const esc = l.escudo ? escudo(l.escudo, h) : null;
       if (l.escudo && !esc) avisos.push('Escudo “' + l.escudo + '” não reconhecido (use SP 330 ou BR 050).');
-      const partes = [st ? st.w : 0, esc ? esc.w : 0, tw, dw].filter(v => v > 0);
+      // imagem/logo no início da linha: altura = fator × h da letra
+      const im = l.img && l.img.src ? { ...l.img, h: (+l.img.k || 1.5) * h } : null; if (im) im.w = im.h * (im.ar || 1);
+      const partes = [st ? st.w : 0, im ? im.w : 0, esc ? esc.w : 0, tw, dw].filter(v => v > 0);
       const w = partes.reduce((a, b) => a + b, 0) + Math.max(0, partes.length - 1) * h;
-      const rh = Math.max(h, st ? st.h : 0, esc ? esc.h : 0);
-      return { l, h, sTx, tw, dist, dw, st, esc, w, rh };
+      const rh = Math.max(h, st ? st.h : 0, esc ? esc.h : 0, im ? im.h : 0);
+      return { l, h, sTx, tw, dist, dw, st, esc, im, w, rh };
     });
     let Wi = Math.max(...R.map(r => r.w + 1.5 * r.h));
     let Hi = 0.75 * R[0].h + 0.75 * R[R.length - 1].h + R.reduce((a, r) => a + r.rh, 0);
@@ -202,6 +204,7 @@ const DGMotor = (function () {
     cam.orla.push(rrect(cl.afast, cl.afast, L - 2 * cl.afast, H - 2 * cl.afast, 50), rrect(C, C, L - 2 * C, H - 2 * C, Math.max(5, 50 - cl.orla)));
     let y = C + 0.75 * R[0].h + extraV;
     const info = { orla: cl.orla, afast: cl.afast, cantos: cl.cantos, raioOrla: 50, rows: [], tarjas: [], tinta: es.tinta, fundo: es.fundo };
+    const imagens = [];
     R.forEach((r, i) => {
       const xl = C + 0.75 * r.h, xr = L - C - 0.75 * r.h;
       const temD = r.st && /D/.test(r.l.seta) && r.l.seta !== 'F', temE = r.st && !temD;
@@ -210,6 +213,7 @@ const DGMotor = (function () {
       if (r.dist) x = xl; else if (temD) x = xr - r.w; else if (temE) x = xl; else x = (L - r.w) / 2;
       const el = []; const rowTop = y;
       if (temE) { cam.tinta.push(...mover(r.st.paths, x, cy - r.st.h / 2)); el.push({ tipo: 'Seta', x, w: r.st.w, y: cy - r.st.h / 2, h: r.st.h }); x += r.st.w + r.h; }
+      if (r.im) { imagens.push({ x, y: cy - r.im.h / 2, w: r.im.w, h: r.im.h, src: r.im.src, iw: r.im.iw, ih: r.im.ih, nome: r.im.nome || 'Imagem' }); el.push({ tipo: 'Imagem', x, w: r.im.w, y: cy - r.im.h / 2, h: r.im.h }); x += r.im.w + r.h; }
       if (r.esc) { cam.escF.push(...mover(r.esc.fundo, x, cy - r.esc.h / 2)); cam.escB.push(...mover(r.esc.borda, x, cy - r.esc.h / 2), ...mover(r.esc.tx, x, cy - r.esc.h / 2)); el.push({ tipo: 'Escudo', x, w: r.esc.w, y: cy - r.esc.h / 2, h: r.esc.h }); x += r.esc.w + r.h; }
       if (r.tw) { cam.tinta.push(...contornosTexto(r.l.texto, r.sTx, r.h, x, yTxt)); el.push({ tipo: 'Texto', x, w: r.tw, y: yTxt, h: r.h, txt: r.l.texto, serie: r.sTx, hl: r.h }); x += r.tw + r.h; }
       if (r.dist) { const xd = temD ? xr - r.st.w - r.h - r.dw : xr - r.dw; cam.tinta.push(...contornosTexto(r.dist, 'EM', r.h, xd, yTxt)); el.push({ tipo: 'Texto', x: xd, w: r.dw, y: yTxt, h: r.h, txt: r.dist, serie: 'EM', hl: r.h }); }
@@ -222,7 +226,7 @@ const DGMotor = (function () {
       }
     });
     return {
-      L, H, calc, avisos, info,
+      L, H, calc, avisos, info, imagens,
       camadas: [
         { nome: 'FUNDO', cor: es.fundo, paths: cam.fundo },
         { nome: 'ORLA_TARJA', cor: es.tinta, paths: cam.orla },

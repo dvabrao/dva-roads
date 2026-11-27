@@ -106,6 +106,9 @@
         <select class="inp" onchange="DG.set(${i},'serie',this.value)">${[['auto', 'Série automática'], ['D', 'Série D'], ['EM', 'Série E(M)']].map(([v, t]) => `<option value="${v}" ${(l.serie || 'auto') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
       <div class="r"><input class="inp" value="${esc(l.dist || '')}" placeholder="Distância (ex.: 12 km)" oninput="DG.set(${i},'dist',this.value)">
         <input class="inp" value="${esc(l.escudo || '')}" placeholder="Escudo (SP 330, BR 050)" oninput="DG.set(${i},'escudo',this.value)"></div>
+      <div class="r">${l.img && l.img.src
+        ? `<img src="${l.img.src}" style="height:40px;max-width:100px;object-fit:contain;background:#eee;border-radius:6px"><select class="inp" onchange="DG.imgK(${i},+this.value)">${[1, 1.5, 2, 2.5, 3].map(k => `<option value="${k}" ${(+l.img.k || 1.5) === k ? 'selected' : ''}>altura ${String(k).replace('.', ',')} × h</option>`).join('')}</select><button class="dg-mini" onclick="DG.imgLinha(${i})">Trocar</button><button class="dg-mini" onclick="DG.imgLinha(${i},true)">✕</button>`
+        : `<button class="btn-full gray" style="margin:0" onclick="DG.imgLinha(${i})">🖼️ Imagem / logo no início da linha</button>`}</div>
       <div class="r"><label style="font-size:13px;display:flex;gap:6px;align-items:center"><input type="checkbox" ${l.tarja ? 'checked' : ''} onchange="DG.set(${i},'tarja',this.checked)"> Tarja abaixo desta linha</label></div></div>`;
   }
   function formTexto(P) {
@@ -306,6 +309,8 @@
       if (k === 'img') { pegaImagem(im => { atual.P.itens.push(Object.assign({ k: 'img', h: 300, alinh: 'centro' }, im)); editor(); }); return; }
       atual.P.itens.push(k === 'picto' ? { k, codigo: 'A-18', h: hPicto('A-18'), alinh: 'centro' } : k === 'sau' ? { k: 'picto', codigo: 'S-2', h: hPicto('S-2'), alinh: 'centro' } : k === 'seta' ? { k, dir: 'BD', h: hLetra(), alinh: 'fim' } : { k, texto: '', h: hLetra(), alinh: 'centro' }); editor();
     },
+    imgLinha(i, tirar) { const l = atual.P.linhas[i]; if (tirar) { delete l.img; salvarLista(); editor(); return; } pegaImagem(im => { l.img = Object.assign({ k: (l.img && l.img.k) || 1.5 }, im); salvarLista(); editor(); }); },
+    imgK(i, k) { const l = atual.P.linhas[i]; if (l.img) { l.img.k = k; salvarLista(); editor(); } },
     trocaImg(i) { pegaImagem(im => { Object.assign(atual.P.itens[i], im); editor(); }); },
     trocaCor(orig, nova) { atual.P.cores = atual.P.cores || {}; if (nova) atual.P.cores[orig] = nova; else delete atual.P.cores[orig]; atual.t = Date.now(); salvarLista(); editor(); },
     cfg(k, v) { cfg[k] = k === 'velocidade' ? +v : v; salvaCfg(); lista(); },
